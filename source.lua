@@ -1,6 +1,6 @@
 --[[
     ╔══════════════════════════════════════════════════╗
-    ║  Nebula UI Library  ·  v2.0.0  ·  3D MONOCHROME   ║
+    ║  Yqantg UI Library  ·  v2.0.0  ·  3D MONOCHROME   ║
     ║  Layered depth · parallax · 3D keycaps · glass    ║
     ╚══════════════════════════════════════════════════╝
 
@@ -17,7 +17,7 @@
       • Tooltips on every element (Tooltip = "text")
       • New elements: ColorPicker, Progress, Segment
       • Config: delete, auto-load, Color3 support
-      • Window:Close() (animated), Nebula:SetDepth(0..1.5)
+      • Window:Close() (animated), Yqantg:SetDepth(0..1.5)
 
     NEW in 2.1
       • BlockInput: camera / game input is sunk while the pointer is over the UI
@@ -25,7 +25,7 @@
       • Windows and the orb are clamped on-screen while dragging
       • Backdrop blur is removed while the window is minimized ( - button )
       • Notify icons + floating orb use random anime-girl images from the web
-        (override with Nebula.Icons.Notify / Nebula.Icons.Orb = id | url | {list})
+        (override with Yqantg.Icons.Notify / Yqantg.Icons.Orb = id | url | {list})
       • Window background image: Background = { Image = id|url|"anime", Transparency = 0..1 }
         Window:SetBackground(img, transparency) / Window:SetBackgroundTransparency(t)
 
@@ -235,7 +235,7 @@ do
     end
 end
 
-local Nebula = {
+local Yqantg = {
     Version      = "2.2.0",
     Depth        = 1,        -- 3D intensity (0 = flat, 1 = default, 1.5 = max)
     Parallax     = true,     -- window follows cursor with depth
@@ -246,13 +246,13 @@ local Nebula = {
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
     AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
     Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
-    ImageFolder  = "NebulaUI/img",
+    ImageFolder  = "YqantgUI/img",
     SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
     Flags        = {},
     Options      = {},
     Windows      = {},
     CurrentTheme = "Obsidian",
-    ConfigFolder = "NebulaUI",
+    ConfigFolder = "YqantgUI",
     _themed  = {},
     _refresh = {},
     _conns   = {},
@@ -261,7 +261,7 @@ local Nebula = {
 ----------------------------------------------------------------------
 -- Themes
 ----------------------------------------------------------------------
-Nebula.Themes = {
+Yqantg.Themes = {
     Obsidian = {
         Accent = Color3.fromRGB(255, 255, 255), Accent2 = Color3.fromRGB(125, 125, 130),
         Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(0, 0, 0),
@@ -381,7 +381,7 @@ Nebula.Themes = {
     },
 }
 -- order shown in Settings > THEME (themes added later by you are appended alphabetically)
-Nebula.ThemeOrder = { "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
+Yqantg.ThemeOrder = { "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
 
 -- status colors are shades of white/gray (icons tell them apart)
 local Status = {
@@ -408,7 +408,7 @@ local function create(class, props, kids)
 end
 
 local function resolve(key)
-    local th = Nebula.Themes[Nebula.CurrentTheme]
+    local th = Yqantg.Themes[Yqantg.CurrentTheme]
     if key == "AccentGrad" then
         return ColorSequence.new(th.Accent, th.Accent2)
     elseif key == "GlowGrad" then
@@ -433,12 +433,12 @@ end
 
 local function bind(inst, prop, key)
     inst[prop] = resolve(key)
-    table.insert(Nebula._themed, { inst, prop, key })
+    table.insert(Yqantg._themed, { inst, prop, key })
     return inst
 end
 
 local function onTheme(fn)
-    table.insert(Nebula._refresh, fn)
+    table.insert(Yqantg._refresh, fn)
 end
 
 local function tween(o, t, p, style, dir)
@@ -449,7 +449,7 @@ end
 
 local function connect(signal, fn)
     local c = signal:Connect(fn)
-    table.insert(Nebula._conns, c)
+    table.insert(Yqantg._conns, c)
     return c
 end
 
@@ -475,7 +475,7 @@ local function bevelGrad(st)
 end
 
 -- sound cues
-function Nebula:_sfx(kind)
+function Yqantg:_sfx(kind)
     if not self.SoundEnabled or not self._gui then return end
     local id = self.SoundIds[kind] or self.SoundIds.Click
     if not id then return end
@@ -486,11 +486,11 @@ function Nebula:_sfx(kind)
 end
 
 -- backdrop blur
-function Nebula:_blur(size)
+function Yqantg:_blur(size)
     if not self.BlurEnabled then size = 0 end
     if not self._blurFx or not self._blurFx.Parent then
         local b = Instance.new("BlurEffect")
-        b.Name = "NebulaBlur"; b.Size = 0
+        b.Name = "YqantgBlur"; b.Size = 0
         pcall(function() b.Parent = Lighting end)
         self._blurFx = b
     end
@@ -498,7 +498,7 @@ function Nebula:_blur(size)
 end
 
 -- blur only while at least one window is open AND not minimized
-function Nebula:_syncBlur()
+function Yqantg:_syncBlur()
     local on = false
     for _, w in ipairs(self.Windows) do
         if w.Visible and not w.Minimized then on = true; break end
@@ -507,14 +507,14 @@ function Nebula:_syncBlur()
 end
 
 -- input sink: while any lock is held, camera / game actions don't receive the input
-function Nebula:_lock(key, on)
+function Yqantg:_lock(key, on)
     self._locks = self._locks or {}
     self._locks[key] = on and true or nil
     local want = self.BlockInput and next(self._locks) ~= nil
     if want and not self._sinking then
         self._sinking = true
         pcall(function()
-            ContextActionService:BindActionAtPriority("NebulaSink", function()
+            ContextActionService:BindActionAtPriority("YqantgSink", function()
                 return Enum.ContextActionResult.Sink
             end, false, Enum.ContextActionPriority.High.Value + 100,
                 Enum.UserInputType.Touch, Enum.UserInputType.MouseButton1,
@@ -522,7 +522,7 @@ function Nebula:_lock(key, on)
         end)
     elseif not want and self._sinking then
         self._sinking = false
-        pcall(function() ContextActionService:UnbindAction("NebulaSink") end)
+        pcall(function() ContextActionService:UnbindAction("YqantgSink") end)
     end
 end
 
@@ -530,7 +530,7 @@ end
 local httpGet = Compat.get
 
 local imgCache, imgN = {}, 0
-function Nebula:_download(url)
+function Yqantg:_download(url)
     if imgCache[url] then return imgCache[url] end
     local toAsset = getcustomasset or getsynasset
     if not (Compat.canAssets and toAsset) then return nil end
@@ -549,7 +549,7 @@ local ANIME_APIS = {
     { "https://api.waifu.pics/sfw/waifu", function(j) return j.url end },
     { "https://nekos.best/api/v2/waifu", function(j) return j.results and j.results[1] and j.results[1].url end },
 }
-function Nebula:_randomAnime()
+function Yqantg:_randomAnime()
     for _ = 1, 6 do
         if self._unloaded then return nil end
         local api = ANIME_APIS[math.random(#ANIME_APIS)]
@@ -568,7 +568,7 @@ function Nebula:_randomAnime()
     end
 end
 
-function Nebula:_warmPool(n)
+function Yqantg:_warmPool(n)
     if self._warming or not self.AnimeIcons or not Compat.canAssets then return end
     self._warming = true
     self._pool = self._pool or {}
@@ -595,7 +595,7 @@ local function pickAnime(self, cb)
 end
 
 -- src: number / "123" / "rbxassetid://.." / "https://.." / {list} / nil|"anime" (random anime) / false (none)
-function Nebula:_image(src, cb)
+function Yqantg:_image(src, cb)
     if src == false then return end
     if type(src) == "table" then src = src[math.random(#src)] end
     if src == nil or src == true or src == "anime" then
@@ -615,14 +615,14 @@ function Nebula:_image(src, cb)
     cb(src)
 end
 
-function Nebula:SetDepth(v) self.Depth = math.clamp(tonumber(v) or 1, 0, 1.5) end
+function Yqantg:SetDepth(v) self.Depth = math.clamp(tonumber(v) or 1, 0, 1.5) end
 
 -- tooltips
 local function addTip(inst, str)
     if not str or str == "" then return end
-    inst.MouseEnter:Connect(function() Nebula:_showTip(str) end)
-    inst.MouseLeave:Connect(function() Nebula:_hideTip() end)
-    inst.MouseMoved:Connect(function(x, y) Nebula:_moveTip(x, y) end)
+    inst.MouseEnter:Connect(function() Yqantg:_showTip(str) end)
+    inst.MouseLeave:Connect(function() Yqantg:_hideTip() end)
+    inst.MouseMoved:Connect(function(x, y) Yqantg:_moveTip(x, y) end)
 end
 
 -- row "press into the screen" feedback (rows register their UIScale here)
@@ -644,7 +644,7 @@ local function animate(inst, fn, gate)
     return { entry = e, Disconnect = function() e.dead = true end }
 end
 
-function Nebula:_startAnimator()
+function Yqantg:_startAnimator()
     if self._animConn then return end
     local acc, clean = 0, 0
     self._animConn = connect(RunService.Heartbeat, function(dt)
@@ -843,13 +843,13 @@ end
 local function makeDraggable(handle, target, getScale, onMove, keep)
     local dragging, dragStart, startPos, startAbs, track = false, nil, nil, nil, nil
     local function stop()
-        if dragging then dragging = false; Nebula:_lock("drag", false) end
+        if dragging then dragging = false; Yqantg:_lock("drag", false) end
     end
     handle.InputBegan:Connect(function(i)
         if isPress(i) then
             if dragging then return end   -- already held by another finger
             dragging, dragStart, startPos, startAbs, track = true, i.Position, target.Position, target.AbsolutePosition, i
-            Nebula:_lock("drag", true)
+            Yqantg:_lock("drag", true)
             i.Changed:Connect(function()
                 if i.UserInputState == Enum.UserInputState.End then stop() end
             end)
@@ -884,7 +884,7 @@ end
 ----------------------------------------------------------------------
 -- Theme switching
 ----------------------------------------------------------------------
-function Nebula:SetTheme(name)
+function Yqantg:SetTheme(name)
     if not self.Themes[name] then return end
     self.CurrentTheme = name
     for i = #self._themed, 1, -1 do
@@ -906,11 +906,11 @@ end
 ----------------------------------------------------------------------
 -- Root gui + notifications
 ----------------------------------------------------------------------
-function Nebula:_ensureGui()
+function Yqantg:_ensureGui()
     if self._gui and self._gui.Parent then return self._gui end
 
     local g = create("ScreenGui", {
-        Name = "NebulaUI_" .. HttpService:GenerateGUID(false):sub(1, 6),
+        Name = "YqantgUI_" .. HttpService:GenerateGUID(false):sub(1, 6),
         ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
@@ -930,7 +930,7 @@ function Nebula:_ensureGui()
     return g
 end
 
-function Nebula:_buildTip(g)
+function Yqantg:_buildTip(g)
     local tip = create("CanvasGroup", {
         Name = "Tooltip", AutomaticSize = Enum.AutomaticSize.XY, Size = UDim2.fromOffset(0, 0),
         BackgroundColor3 = Color3.fromRGB(14, 14, 16), BorderSizePixel = 0, GroupTransparency = 1,
@@ -949,7 +949,7 @@ function Nebula:_buildTip(g)
     self._tip = { frame = tip, label = lbl, scale = sc, tok = 0 }
 end
 
-function Nebula:_showTip(str)
+function Yqantg:_showTip(str)
     if self.Tooltips == false then return end
     local t = self._tip
     if not t then return end
@@ -965,7 +965,7 @@ function Nebula:_showTip(str)
     end)
 end
 
-function Nebula:_hideTip()
+function Yqantg:_hideTip()
     local t = self._tip
     if not t then return end
     t.tok = t.tok + 1
@@ -974,7 +974,7 @@ function Nebula:_hideTip()
     task.delay(0.13, function() if my == t.tok then t.frame.Visible = false end end)
 end
 
-function Nebula:_moveTip(x, y)
+function Yqantg:_moveTip(x, y)
     local t = self._tip
     if not t then return end
     local cam = workspace.CurrentCamera
@@ -983,7 +983,7 @@ function Nebula:_moveTip(x, y)
     t.frame.Position = UDim2.fromOffset(px, y + 18)
 end
 
-function Nebula:Notify(o)
+function Yqantg:Notify(o)
     o = o or {}
     self:_ensureGui()
     self:_sfx("Notify")
@@ -1097,7 +1097,7 @@ end
 ----------------------------------------------------------------------
 -- Splash / loading screen (yields until finished)
 ----------------------------------------------------------------------
-function Nebula:Splash(o)
+function Yqantg:Splash(o)
     o = o or {}
     local g = self:_ensureGui()
     local steps = o.Steps or { "loading modules", "finalizing" }
@@ -1158,7 +1158,7 @@ function Nebula:Splash(o)
     })
     bind(letter, "TextColor3", "Accent")
 
-    local titleStr = o.Title or "NEBULA"
+    local titleStr = o.Title or "YQANTG"
     local title = create("TextLabel", {
         BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 28),
         Size = UDim2.fromOffset(340, 36), Text = titleStr, TextSize = 30, Font = Enum.Font.GothamBlack,
@@ -1263,7 +1263,7 @@ end
 ----------------------------------------------------------------------
 -- Config
 ----------------------------------------------------------------------
-function Nebula:ListConfigs()
+function Yqantg:ListConfigs()
     local out, seenN = {}, {}
     do
         for _, f in ipairs(Compat.listfiles(self.ConfigFolder)) do
@@ -1274,7 +1274,7 @@ function Nebula:ListConfigs()
     return out
 end
 
-function Nebula:SaveConfig(name)
+function Yqantg:SaveConfig(name)
     if not name or name == "" then return false end
     local data = {}
     for flag, v in pairs(self.Flags) do
@@ -1288,7 +1288,7 @@ function Nebula:SaveConfig(name)
     return ok
 end
 
-function Nebula:LoadConfig(name)
+function Yqantg:LoadConfig(name)
     if not name then return false end
     local path = self.ConfigFolder .. "/" .. name .. ".json"
     if not Compat.isfile(path) then return false end
@@ -1304,14 +1304,14 @@ function Nebula:LoadConfig(name)
     return true
 end
 
-function Nebula:DeleteConfig(name)
+function Yqantg:DeleteConfig(name)
     if not name then return false end
     local path = self.ConfigFolder .. "/" .. name .. ".json"
     if not Compat.isfile(path) then return false end
     return Compat.delfile(path)
 end
 
-function Nebula:SetAutoLoad(name)
+function Yqantg:SetAutoLoad(name)
     local path = self.ConfigFolder .. "/autoload.txt"
     Compat.makefolder(self.ConfigFolder)
     if name and name ~= "" then
@@ -1321,7 +1321,7 @@ function Nebula:SetAutoLoad(name)
     return true
 end
 
-function Nebula:GetAutoLoad()
+function Yqantg:GetAutoLoad()
     local path = self.ConfigFolder .. "/autoload.txt"
     if Compat.isfile(path) then
         local n = Compat.readfile(path)
@@ -1329,12 +1329,12 @@ function Nebula:GetAutoLoad()
     end
 end
 
-function Nebula:LoadAuto()
+function Yqantg:LoadAuto()
     local n = self:GetAutoLoad()
     return n and self:LoadConfig(n) or false
 end
 
-function Nebula:Unload()
+function Yqantg:Unload()
     self._unloaded = true
     for _, c in ipairs(self._conns) do pcall(function() c:Disconnect() end) end
     self._conns, self._themed, self._refresh = {}, {}, {}
@@ -1345,7 +1345,7 @@ function Nebula:Unload()
     self._tip = nil
     self._gui = nil
     self._locks = {}
-    pcall(function() ContextActionService:UnbindAction("NebulaSink") end)
+    pcall(function() ContextActionService:UnbindAction("YqantgSink") end)
     self._sinking = false
 end
 
@@ -1388,7 +1388,7 @@ local function newRow(section, height)
     row.MouseMoved:Connect(function(x)
         -- the light direction follows the cursor -> surface looks tilted toward it
         local rel = math.clamp((x - row.AbsolutePosition.X) / math.max(row.AbsoluteSize.X, 1), 0, 1)
-        sh.Rotation = 90 + (rel - 0.5) * 70 * Nebula.Depth
+        sh.Rotation = 90 + (rel - 0.5) * 70 * Yqantg.Depth
     end)
     row.MouseLeave:Connect(function()
         tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.5 })
@@ -1403,13 +1403,13 @@ local function register(obj, o)
     obj._flag = o.Flag
     obj.NoSave = o.NoSave
     if o.Flag then
-        Nebula.Flags[o.Flag] = obj.Value
-        Nebula.Options[o.Flag] = obj
+        Yqantg.Flags[o.Flag] = obj.Value
+        Yqantg.Options[o.Flag] = obj
     end
 end
 
 local function changed(obj, o, silent)
-    if obj._flag then Nebula.Flags[obj._flag] = obj.Value end
+    if obj._flag then Yqantg.Flags[obj._flag] = obj.Value end
     if not silent and o.Callback then task.spawn(o.Callback, obj.Value) end
 end
 
@@ -1503,7 +1503,7 @@ function Section:AddButton(o)
         -- label drifts opposite to the cursor -> parallax inside the key
         local rx = math.clamp((x - btn.AbsolutePosition.X) / math.max(btn.AbsoluteSize.X, 1), 0, 1)
         local ry = math.clamp((y - btn.AbsolutePosition.Y) / math.max(btn.AbsoluteSize.Y, 1), 0, 1)
-        l.Position = UDim2.fromOffset(-(rx - 0.5) * 6 * Nebula.Depth, -(ry - 0.5) * 4 * Nebula.Depth)
+        l.Position = UDim2.fromOffset(-(rx - 0.5) * 6 * Yqantg.Depth, -(ry - 0.5) * 4 * Yqantg.Depth)
     end)
     btn.MouseLeave:Connect(function()
         bh.entry.on = false
@@ -1535,7 +1535,7 @@ function Section:AddButton(o)
     btn.MouseButton1Click:Connect(function()
         tween(bs, 0.4, { Scale = 1 }, Enum.EasingStyle.Back)
         tween(shade, 0.15, { BackgroundTransparency = 0.94 })
-        Nebula:_sfx("Click")
+        Yqantg:_sfx("Click")
         if o.Callback then task.spawn(o.Callback) end
     end)
     addTip(btn, o.Tooltip)
@@ -1591,7 +1591,7 @@ function Section:AddToggle(o)
     end
     function obj:Get() return obj.Value end
     function obj:SetVisible(b) row.Visible = b end
-    click.MouseButton1Click:Connect(function() Nebula:_sfx("Toggle"); obj:Set(not obj.Value) end)
+    click.MouseButton1Click:Connect(function() Yqantg:_sfx("Toggle"); obj:Set(not obj.Value) end)
     addTip(click, o.Tooltip); pressDepth(click, row)
     click.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
 
@@ -1763,7 +1763,7 @@ function Section:AddKeybind(o)
             k = ok and e or Enum.KeyCode.Unknown
         end
         obj.Value = k or Enum.KeyCode.Unknown
-        if obj._flag then Nebula.Flags[obj._flag] = obj.Value end
+        if obj._flag then Yqantg.Flags[obj._flag] = obj.Value end
         render()
         if not silent and o.ChangedCallback then task.spawn(o.ChangedCallback, obj.Value) end
     end
@@ -1771,7 +1771,7 @@ function Section:AddKeybind(o)
     function obj:SetVisible(b) row.Visible = b end
 
     addTip(btn, o.Tooltip); pressDepth(btn, row)
-    btn.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj.Listening = true; render() end)
+    btn.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj.Listening = true; render() end)
     btn.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
     connect(UserInputService.InputBegan, function(i, gp)
         if obj.Listening then
@@ -1862,7 +1862,7 @@ function Section:AddDropdown(o)
     onTheme(paint)
 
     local function choose(k)
-        Nebula:_sfx("Click")
+        Yqantg:_sfx("Click")
         if obj.Multi then obj.Value[k] = (not obj.Value[k]) or nil
         else obj.Value = k end
         paint(); changed(obj, o, false)
@@ -1969,7 +1969,7 @@ function Section:AddDropdown(o)
     function obj:SetVisible(b) root.Visible = b end
 
     addTip(head, o.Tooltip); pressDepth(head, root)
-    head.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Toggle() end)
+    head.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj:Toggle() end)
     head.ClipsDescendants = true
     corner(head, 8)
     head.MouseButton1Down:Connect(function(x) ripple(head, x, dsec.Tab.Window._scaleObj, 0.9) end)
@@ -2044,7 +2044,7 @@ function Section:AddSegment(o)
             Text = tostring(k), TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 3, Parent = bar,
         })
         btns[i] = { b, k }
-        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Set(k) end)
+        b.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj:Set(k) end)
         addTip(b, o.Tooltip)
     end
     local function render(anim)
@@ -2188,7 +2188,7 @@ function Section:AddColorPicker(o)
     head.ClipsDescendants = true
     corner(head, 8)
     head.MouseButton1Down:Connect(function(x) ripple(head, x, self.Tab.Window._scaleObj, 0.9) end)
-    head.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Toggle() end)
+    head.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj:Toggle() end)
     addTip(head, o.Tooltip); pressDepth(head, root)
     register(obj, o); refresh(true)
     return obj
@@ -2299,7 +2299,7 @@ function Section:AddOwner(o)
     btn.MouseButton1Click:Connect(function()
         local copied = o.Link ~= nil and Compat.copy(o.Link)
         btnL.Text = copied and "COPIED!" or "SEE LINK"
-        Nebula:Notify({
+        Yqantg:Notify({
             Title = copied and "Link copied" or "Clipboard not supported", Content = o.Link or "",
             Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
         })
@@ -2410,7 +2410,7 @@ function Section:AddSocial(o)
         ImageTransparency = 1, ZIndex = 4, Parent = thumb,
     })
     if o.Image ~= nil and o.Image ~= false then
-        Nebula:_image(o.Image, function(asset)
+        Yqantg:_image(o.Image, function(asset)
             if not pic.Parent then return end
             pic.Image = asset
             tween(pic, 0.4, { ImageTransparency = 0 })
@@ -2441,7 +2441,7 @@ function Section:AddSocial(o)
     btn.MouseButton1Click:Connect(function()
         local copied = Compat.copy(link)
         btnL.Text = copied and "COPIED!" or "SEE LINK"
-        Nebula:Notify({
+        Yqantg:Notify({
             Title = copied and (isYT and "YouTube link copied" or "Discord link copied") or "Clipboard not supported",
             Content = link, Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
         })
@@ -2520,7 +2520,7 @@ function Section:AddOverview(o)
         btn.MouseButton1Click:Connect(function()
             local copied = link ~= nil and Compat.copy(link)
             bl.Text = copied and "COPIED!" or "SEE LINK"
-            Nebula:Notify({
+            Yqantg:Notify({
                 Title = copied and (what .. " link copied") or "Clipboard not supported", Content = link or "",
                 Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
             })
@@ -2843,7 +2843,7 @@ end
 ----------------------------------------------------------------------
 -- Window
 ----------------------------------------------------------------------
-function Nebula:CreateWindow(cfg)
+function Yqantg:CreateWindow(cfg)
     cfg = cfg or {}
     local gui = self:_ensureGui()
     local Window = { Tabs = {}, Visible = true, Minimized = false, ActiveTab = nil }
@@ -2881,7 +2881,7 @@ function Nebula:CreateWindow(cfg)
     local liftV  = create("NumberValue", { Value = 0, Parent = Root })
     local par = { x = 0, y = 0 }
     local function applyDepth()
-        local k, f, lf = Nebula.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value
+        local k, f, lf = Yqantg.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value
         slab.Position  = UDim2.fromOffset(-par.x * 5 * k, (7 + lf) * k * f)
         slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k, (13 + lf * 1.8) * k * f)
         slab.BackgroundTransparency  = math.clamp(1 - f, 0, 1)
@@ -2898,7 +2898,7 @@ function Nebula:CreateWindow(cfg)
     -- cursor parallax: layers slide against each other, specular light follows the mouse
     local ptx, pty = 0, 0
     animate(Root, function()
-        if Nebula.Parallax and not touchOnly() then
+        if Yqantg.Parallax and not touchOnly() then
             local m = UserInputService:GetMouseLocation()
             local c = Root.AbsolutePosition + Root.AbsoluteSize / 2
             ptx = math.clamp((m.X - c.X) / math.max(Root.AbsoluteSize.X, 1), -1, 1)
@@ -2908,7 +2908,7 @@ function Nebula:CreateWindow(cfg)
         end
         par.x = par.x + (ptx - par.x) * 0.28
         par.y = par.y + (pty - par.y) * 0.28
-        mainSheen.Rotation = 65 + par.x * 24 * Nebula.Depth
+        mainSheen.Rotation = 65 + par.x * 24 * Yqantg.Depth
         applyDepth()
     end, vgate)
 
@@ -2940,7 +2940,7 @@ function Nebula:CreateWindow(cfg)
     bind(avatar, "BackgroundColor3", "Element")
     corner(avatar, 14)
     glowStroke(avatar, 1.6, 120, 0, { gate = vgate })
-    local title = text(top, cfg.Title or "Nebula", 14, "Text", Enum.Font.GothamBold)
+    local title = text(top, cfg.Title or "Yqantg", 14, "Text", Enum.Font.GothamBold)
     title.Position = UDim2.fromOffset(46, 5); title.Size = UDim2.fromOffset(SIDE - 46, 16)
     local ttg = gradient(title, "TextGrad")
     animate(title, function(t) ttg.Offset = Vector2.new(math.sin(t * 1.2) * 0.55, 0) end, vgate)
@@ -3053,7 +3053,7 @@ function Nebula:CreateWindow(cfg)
         end
     end)
     gearBtn.MouseButton1Click:Connect(function()
-        Nebula:_sfx("Click")
+        Yqantg:_sfx("Click")
         if setPanel then setPanel(not panelOpen) end
     end)
 
@@ -3263,7 +3263,7 @@ function Nebula:CreateWindow(cfg)
         end
         onTheme(render); render()
         refreshers[#refreshers + 1] = render
-        r.MouseButton1Click:Connect(function() set(not get()); render(); Nebula:_sfx("Toggle") end)
+        r.MouseButton1Click:Connect(function() set(not get()); render(); Yqantg:_sfx("Toggle") end)
     end
 
     -- slider: follows only the finger that started on it (multi-touch safe), scroll is paused while dragging
@@ -3347,7 +3347,7 @@ function Nebula:CreateWindow(cfg)
         b.MouseEnter:Connect(function() bh.entry.on = true end)
         b.MouseLeave:Connect(function() bh.entry.on = false end)
         b.MouseButton1Down:Connect(function(x) ripple(b, x, scale, 0.82) end)
-        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); fn() end)
+        b.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); fn() end)
         return b
     end
 
@@ -3387,18 +3387,18 @@ function Nebula:CreateWindow(cfg)
         create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(120, 120, 128), Transparency = 0.4, Parent = dot })
         local tl = text(b, n, 11, "Text"); tl.Position = UDim2.fromOffset(24, 0); tl.Size = UDim2.new(1, -26, 1, 0); tl.ZIndex = 35
         themeBtns[n] = stroke(b, "Accent", 1.4, 1)
-        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); Nebula:SetTheme(n) end)
+        b.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); Yqantg:SetTheme(n) end)
     end
-    local function renderThemes() for n, st in pairs(themeBtns) do st.Transparency = (n == Nebula.CurrentTheme) and 0.05 or 1 end end
+    local function renderThemes() for n, st in pairs(themeBtns) do st.Transparency = (n == Yqantg.CurrentTheme) and 0.05 or 1 end end
     onTheme(renderThemes); renderThemes()
 
     -- INTERFACE
     local uiCard = card("INTERFACE")
     sliderRow(uiCard, "UI scale", 0.5, 1.5, 0.05, function() return Window._scale end, setScale, pct, true)
-    sliderRow(uiCard, "3D depth", 0, 1.5, 0.05, function() return Nebula.Depth end, function(v) Nebula:SetDepth(v) end, pct)
-    toggleRow(uiCard, "3D parallax", function() return Nebula.Parallax end, function(b) Nebula.Parallax = b end)
-    toggleRow(uiCard, "Backdrop blur", function() return Nebula.BlurEnabled end, function(b) Nebula.BlurEnabled = b; Nebula:_syncBlur() end)
-    toggleRow(uiCard, "Tooltips", function() return Nebula.Tooltips ~= false end, function(b) Nebula.Tooltips = b end)
+    sliderRow(uiCard, "3D depth", 0, 1.5, 0.05, function() return Yqantg.Depth end, function(v) Yqantg:SetDepth(v) end, pct)
+    toggleRow(uiCard, "3D parallax", function() return Yqantg.Parallax end, function(b) Yqantg.Parallax = b end)
+    toggleRow(uiCard, "Backdrop blur", function() return Yqantg.BlurEnabled end, function(b) Yqantg.BlurEnabled = b; Yqantg:_syncBlur() end)
+    toggleRow(uiCard, "Tooltips", function() return Yqantg.Tooltips ~= false end, function(b) Yqantg.Tooltips = b end)
 
     -- BACKGROUND
     local bgCard = card("BACKGROUND")
@@ -3406,35 +3406,35 @@ function Nebula:CreateWindow(cfg)
         function(v) Window:SetBackgroundTransparency(1 - v) end, pct)
     buttonRow(bgCard, "NEW RANDOM BACKGROUND", function()
         if not Compat.canAssets then
-            Nebula:Notify({ Title = "Images unavailable", Content = "This executor can't load web images.", Type = "Warning" })
+            Yqantg:Notify({ Title = "Images unavailable", Content = "This executor can't load web images.", Type = "Warning" })
             return
         end
-        Nebula.AnimeIcons = true
+        Yqantg.AnimeIcons = true
         Window:SetBackground("anime")
     end)
     buttonRow(bgCard, "REMOVE BACKGROUND", function() Window:SetBackground(false) end)
 
     -- SOUND & INPUT
     local sndCard = card("SOUND & INPUT")
-    toggleRow(sndCard, "Sound cues", function() return Nebula.SoundEnabled end, function(b) Nebula.SoundEnabled = b end)
-    sliderRow(sndCard, "Volume", 0, 1.5, 0.05, function() return Nebula.SoundVolume or 1 end, function(v) Nebula.SoundVolume = v end, pct)
-    toggleRow(sndCard, "Block camera drag", function() return Nebula.BlockInput end, function(b) Nebula.BlockInput = b; Nebula:_lock("refresh", false) end)
+    toggleRow(sndCard, "Sound cues", function() return Yqantg.SoundEnabled end, function(b) Yqantg.SoundEnabled = b end)
+    sliderRow(sndCard, "Volume", 0, 1.5, 0.05, function() return Yqantg.SoundVolume or 1 end, function(v) Yqantg.SoundVolume = v end, pct)
+    toggleRow(sndCard, "Block camera drag", function() return Yqantg.BlockInput end, function(b) Yqantg.BlockInput = b; Yqantg:_lock("refresh", false) end)
 
     -- RESET + info
     local defaults = {
-        theme = self.CurrentTheme, scale = base, depth = Nebula.Depth, par = Nebula.Parallax, blur = Nebula.BlurEnabled,
-        snd = Nebula.SoundEnabled, vol = Nebula.SoundVolume or 1, block = Nebula.BlockInput, tips = Nebula.Tooltips ~= false, bg = 0.6,
+        theme = self.CurrentTheme, scale = base, depth = Yqantg.Depth, par = Yqantg.Parallax, blur = Yqantg.BlurEnabled,
+        snd = Yqantg.SoundEnabled, vol = Yqantg.SoundVolume or 1, block = Yqantg.BlockInput, tips = Yqantg.Tooltips ~= false, bg = 0.6,
     }
     local function resetAll()
-        Nebula:SetTheme(defaults.theme)
+        Yqantg:SetTheme(defaults.theme)
         setScale(defaults.scale)
-        Nebula:SetDepth(defaults.depth)
-        Nebula.Parallax = defaults.par
-        Nebula.BlurEnabled = defaults.blur; Nebula:_syncBlur()
-        Nebula.SoundEnabled = defaults.snd
-        Nebula.SoundVolume = defaults.vol
-        Nebula.BlockInput = defaults.block; Nebula:_lock("refresh", false)
-        Nebula.Tooltips = defaults.tips
+        Yqantg:SetDepth(defaults.depth)
+        Yqantg.Parallax = defaults.par
+        Yqantg.BlurEnabled = defaults.blur; Yqantg:_syncBlur()
+        Yqantg.SoundEnabled = defaults.snd
+        Yqantg.SoundVolume = defaults.vol
+        Yqantg.BlockInput = defaults.block; Yqantg:_lock("refresh", false)
+        Yqantg.Tooltips = defaults.tips
         Window:SetBackgroundTransparency(defaults.bg)
         for _, f in ipairs(refreshers) do f() end
     end
@@ -3442,7 +3442,7 @@ function Nebula:CreateWindow(cfg)
     buttonRow(footCard, "RESET ALL SETTINGS", resetAll)
     local sup = Compat.report()
     local function onoff(b) return b and "on" or "off" end
-    local credit = text(footCard, (cfg.Brand or "Nebula UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.GothamBold)
+    local credit = text(footCard, (cfg.Brand or "Yqantg UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.GothamBold)
     credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = nextLO(footCard); credit.TextXAlignment = Enum.TextXAlignment.Center; credit.ZIndex = 33
     local info = text(footCard, ("%s  ·  files %s  ·  images %s  ·  clipboard %s"):format(sup.Executor, onoff(sup.Files), onoff(sup.Assets), onoff(sup.Clipboard)), 9, "SubText", Enum.Font.Gotham)
     info.Size = UDim2.new(1, 0, 0, 24); info.LayoutOrder = nextLO(footCard); info.TextXAlignment = Enum.TextXAlignment.Center
@@ -3475,7 +3475,7 @@ function Nebula:CreateWindow(cfg)
         applyGear()
     end
     scrim.MouseButton1Click:Connect(function() setPanel(false) end)
-    pClose.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); setPanel(false) end)
+    pClose.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); setPanel(false) end)
 
     ------------------------------------------------ window methods (3D open / close)
     local popItems = {}
@@ -3506,8 +3506,8 @@ function Nebula:CreateWindow(cfg)
         tween(Root, 0.8, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Back)
         tween(introV, 0.9, { Value = 1 }, Enum.EasingStyle.Back)
         tween(glow, 0.8, { Thickness = 2 })
-        Nebula:_syncBlur()
-        Nebula:_sfx("Open")
+        Yqantg:_syncBlur()
+        Yqantg:_sfx("Open")
         -- staggered pop-in of top bar / tabs / sections
         for i, p in ipairs(popItems) do
             task.delay(0.22 + i * 0.06, function() if my == tok then tween(p, 0.5, { Scale = 1 }, Enum.EasingStyle.Back) end end)
@@ -3531,7 +3531,7 @@ function Nebula:CreateWindow(cfg)
     end
 
     local function outro()
-        Nebula:_lock("hover" .. tostring(Window), false)
+        Yqantg:_lock("hover" .. tostring(Window), false)
         tok = tok + 1
         local my = tok
         restPos = Root.Position
@@ -3544,8 +3544,8 @@ function Nebula:CreateWindow(cfg)
         }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         tween(introV, 0.32, { Value = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         tween(glow, 0.3, { Thickness = 0.5 })
-        Nebula:_syncBlur()
-        Nebula:_sfx("Close")
+        Yqantg:_syncBlur()
+        Yqantg:_sfx("Close")
         task.delay(0.42, function()
             if my ~= tok then return end
             Root.Visible = false
@@ -3572,9 +3572,9 @@ function Nebula:CreateWindow(cfg)
 
     function Window:Minimize()
         Window.Minimized = not Window.Minimized
-        Nebula:_syncBlur()   -- minimized = no blur, restored = blur again
+        Yqantg:_syncBlur()   -- minimized = no blur, restored = blur again
         setPanel(false)
-        Nebula:_sfx("Click")
+        Yqantg:_sfx("Click")
         grip.Visible = not Window.Minimized
         if Window.Minimized then
             savedPos = Root.Position
@@ -3615,13 +3615,13 @@ function Nebula:CreateWindow(cfg)
     function Window:Destroy()
         if Window._orb then Window._orb:Destroy() end
         Root:Destroy()
-        for i = #Nebula.Windows, 1, -1 do if Nebula.Windows[i] == Window then table.remove(Nebula.Windows, i) end end
-        Nebula:_lock("hover" .. tostring(Window), false)
-        Nebula:_lock("press" .. tostring(Window), false)
-        Nebula:_syncBlur()
+        for i = #Yqantg.Windows, 1, -1 do if Yqantg.Windows[i] == Window then table.remove(Yqantg.Windows, i) end end
+        Yqantg:_lock("hover" .. tostring(Window), false)
+        Yqantg:_lock("press" .. tostring(Window), false)
+        Yqantg:_syncBlur()
     end
     function Window:SetTitle(s, sub) title.Text = s or title.Text; if sub then subtitle.Text = "●  " .. sub end end
-    function Window:Notify(o) Nebula:Notify(o) end
+    function Window:Notify(o) Yqantg:Notify(o) end
 
     -- background image (id / url / "anime"); transparency 0 = solid image, 1 = invisible
     Window._bgAlpha = 0.6
@@ -3644,7 +3644,7 @@ function Nebula:CreateWindow(cfg)
         if not src then
             bgImg.Visible = false; bgImg.Image = ""; Window:_glass(); return
         end
-        Nebula:_image(src, function(asset)
+        Yqantg:_image(src, function(asset)
             if not bgImg.Parent then return end
             bgImg.Image = asset
             bgImg.Visible = true
@@ -3664,7 +3664,7 @@ function Nebula:CreateWindow(cfg)
     -- floating orb (mobile friendly)
     if cfg.ToggleButton ~= false then
         local orb = create("TextButton", {
-            Name = "NebulaOrb", Position = UDim2.new(0, 14, .5, -22), Size = UDim2.fromOffset(44, 44),
+            Name = "YqantgOrb", Position = UDim2.new(0, 14, .5, -22), Size = UDim2.fromOffset(44, 44),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false,
             Text = "", ZIndex = 50, Parent = gui,
         })
@@ -3680,7 +3680,7 @@ function Nebula:CreateWindow(cfg)
             ScaleType = Enum.ScaleType.Crop, Parent = orb,
         })
         corner(orbPic, 22)
-        Nebula:_image(cfg.ToggleIcon ~= nil and cfg.ToggleIcon or Nebula.Icons.Orb, function(asset)
+        Yqantg:_image(cfg.ToggleIcon ~= nil and cfg.ToggleIcon or Yqantg.Icons.Orb, function(asset)
             if not orbPic.Parent then return end
             orbPic.Image = asset
             tween(orbPic, 0.4, { ImageTransparency = 0 })
@@ -3735,7 +3735,7 @@ function Nebula:CreateWindow(cfg)
             if not on and t ~= prev then t.Group.Visible = false end
         end
         if prev ~= tab then
-            Nebula:_sfx("Click")
+            Yqantg:_sfx("Click")
             if prev then
                 prev._tok = (prev._tok or 0) + 1
                 local my = prev._tok
@@ -3817,7 +3817,7 @@ function Nebula:CreateWindow(cfg)
 
         b.MouseButton1Click:Connect(function()
             if tab.Locked then
-                Nebula:Notify({ Title = "Access Denied", Content = o.LockedMessage or "This tab is locked.", Type = "Error" })
+                Yqantg:Notify({ Title = "Access Denied", Content = o.LockedMessage or "This tab is locked.", Type = "Error" })
                 return
             end
             Window:SelectTab(tab)
@@ -3845,46 +3845,46 @@ function Nebula:CreateWindow(cfg)
         local tab = Window:AddTab(name or "Config")
         local sec = tab:AddSection("Configs")
         local nameBox = sec:AddInput({ Name = "Config name", Placeholder = "my-config", NoSave = true })
-        local list = sec:AddDropdown({ Name = "Saved configs", Options = Nebula:ListConfigs(), NoSave = true })
+        local list = sec:AddDropdown({ Name = "Saved configs", Options = Yqantg:ListConfigs(), NoSave = true })
         sec:AddButton({ Name = "Save", Callback = function()
             local n = nameBox.Value ~= "" and nameBox.Value or list.Value
-            if n and Nebula:SaveConfig(n) then
-                list:SetOptions(Nebula:ListConfigs())
-                Nebula:Notify({ Title = "Config saved", Content = tostring(n) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
+            if n and Yqantg:SaveConfig(n) then
+                list:SetOptions(Yqantg:ListConfigs())
+                Yqantg:Notify({ Title = "Config saved", Content = tostring(n) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
             else
-                Nebula:Notify({ Title = "Save failed", Content = "Enter a name (executor must support writefile).", Type = "Error" })
+                Yqantg:Notify({ Title = "Save failed", Content = "Enter a name (executor must support writefile).", Type = "Error" })
             end
         end })
         sec:AddButton({ Name = "Load", Callback = function()
-            if list.Value and Nebula:LoadConfig(list.Value) then
-                Nebula:Notify({ Title = "Config loaded", Content = tostring(list.Value), Type = "Success" })
+            if list.Value and Yqantg:LoadConfig(list.Value) then
+                Yqantg:Notify({ Title = "Config loaded", Content = tostring(list.Value), Type = "Success" })
             else
-                Nebula:Notify({ Title = "Load failed", Content = "Pick a saved config first.", Type = "Warning" })
+                Yqantg:Notify({ Title = "Load failed", Content = "Pick a saved config first.", Type = "Warning" })
             end
         end })
-        sec:AddButton({ Name = "Refresh list", Callback = function() list:SetOptions(Nebula:ListConfigs()) end })
+        sec:AddButton({ Name = "Refresh list", Callback = function() list:SetOptions(Yqantg:ListConfigs()) end })
         sec:AddButton({ Name = "Delete", Callback = function()
-            if list.Value and Nebula:DeleteConfig(list.Value) then
-                Nebula:Notify({ Title = "Config deleted", Content = tostring(list.Value), Type = "Warning" })
+            if list.Value and Yqantg:DeleteConfig(list.Value) then
+                Yqantg:Notify({ Title = "Config deleted", Content = tostring(list.Value), Type = "Warning" })
                 list:Set(nil, true)
-                list:SetOptions(Nebula:ListConfigs())
+                list:SetOptions(Yqantg:ListConfigs())
             else
-                Nebula:Notify({ Title = "Delete failed", Content = "Pick a saved config first.", Type = "Error" })
+                Yqantg:Notify({ Title = "Delete failed", Content = "Pick a saved config first.", Type = "Error" })
             end
         end })
-        local auto = Nebula:GetAutoLoad()
+        local auto = Yqantg:GetAutoLoad()
         local autoLbl = sec:AddLabel(auto and ("Auto-load: " .. auto) or "Auto-load: off")
         sec:AddButton({ Name = "Set as auto-load", Callback = function()
             local n = list.Value
-            if n and Nebula:SetAutoLoad(n) then
+            if n and Yqantg:SetAutoLoad(n) then
                 autoLbl:Set("Auto-load: " .. tostring(n))
-                Nebula:Notify({ Title = "Auto-load", Content = tostring(n), Type = "Success" })
+                Yqantg:Notify({ Title = "Auto-load", Content = tostring(n), Type = "Success" })
             else
-                Nebula:Notify({ Title = "Auto-load failed", Content = "Pick a saved config first.", Type = "Warning" })
+                Yqantg:Notify({ Title = "Auto-load failed", Content = "Pick a saved config first.", Type = "Warning" })
             end
         end })
         sec:AddButton({ Name = "Clear auto-load", Callback = function()
-            Nebula:SetAutoLoad(nil); autoLbl:Set("Auto-load: off")
+            Yqantg:SetAutoLoad(nil); autoLbl:Set("Auto-load: off")
         end })
         return tab
     end
@@ -3898,18 +3898,18 @@ function Nebula:CreateWindow(cfg)
     local hovering = false
     animate(Root, function()
         local h = (not touchOnly()) and inside(UserInputService:GetMouseLocation())
-        if h ~= hovering then hovering = h; Nebula:_lock(hoverKey, h) end
+        if h ~= hovering then hovering = h; Yqantg:_lock(hoverKey, h) end
     end)
     local pressed = {}   -- every finger that started on this window; unlock when all are up
     connect(UserInputService.InputBegan, function(i)
         if isPress(i) and inside(Vector2.new(i.Position.X, i.Position.Y)) then
-            pressed[i] = true; Nebula:_lock(pressKey, true)
+            pressed[i] = true; Yqantg:_lock(pressKey, true)
         end
     end)
     connect(UserInputService.InputEnded, function(i)
         if pressed[i] then
             pressed[i] = nil
-            if next(pressed) == nil then Nebula:_lock(pressKey, false) end
+            if next(pressed) == nil then Yqantg:_lock(pressKey, false) end
         end
     end)
 
@@ -3930,8 +3930,8 @@ function Nebula:CreateWindow(cfg)
     return Window
 end
 
-Nebula.Compat = Compat
+Yqantg.Compat = Compat
 -- what this executor supports: { Executor, Files, Assets, Http, Clipboard, HiddenUI, CloneRef }
-function Nebula:GetSupport() return Compat.report() end
+function Yqantg:GetSupport() return Compat.report() end
 
-return Nebula
+return Yqantg
