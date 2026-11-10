@@ -1,18 +1,18 @@
 --[[ Yqantg Hub · example.lua — one of every component the library has ]]
 
-local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
--- local file instead:  loadstring(readfile("Nebula/source.lua"))()
+local Yqantg = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
+-- local file instead:  loadstring(readfile("Yqantg/source.lua"))()
 
 local LocalPlayer = game:GetService("Players").LocalPlayer
 
 -- optional settings ---------------------------------------------------------
--- Nebula.BlockInput = true            -- sink camera/game input while over the UI (default on)
--- Nebula.Icons.Notify = "rbxassetid://123"   -- id | url | {list} | false   (default: random anime girl)
--- Nebula.Icons.Orb    = { "https://...png", 456789 }
+-- Yqantg.BlockInput = true            -- sink camera/game input while over the UI (default on)
+-- Yqantg.Icons.Notify = "rbxassetid://123"   -- id | url | {list} | false   (default: random anime girl)
+-- Yqantg.Icons.Orb    = { "https://...png", 456789 }
 
-Nebula:Splash({ Title = "YQANTG", Subtitle = "UI Library", Steps = { "loading", "building", "done" }, Duration = 2 })
+Yqantg:Splash({ Title = "YQANTG", Subtitle = "UI Library", Steps = { "loading", "building", "done" }, Duration = 2 })
 
-local Window = Nebula:CreateWindow({
+local Window = Yqantg:CreateWindow({
     Title        = "Yqantg Hub",
     Subtitle     = LocalPlayer.Name,
     Size         = UDim2.fromOffset(600, 380),
@@ -37,7 +37,7 @@ Basic:AddParagraph({ Title = "Paragraph", Content = "Title + wrapped text." })
 Basic:AddDivider()
 Basic:AddButton({
     Name = "Button", Tooltip = "Tooltip works on every element",
-    Callback = function() Nebula:Notify({ Title = "Hello", Content = "Button clicked.", Type = "Success" }) end,
+    Callback = function() Yqantg:Notify({ Title = "Hello", Content = "Button clicked.", Type = "Success" }) end,
 })
 Basic:AddToggle({ Name = "Toggle", Flag = "Toggle", Default = false, Callback = function(on) print("Toggle", on) end })
 
@@ -59,19 +59,19 @@ Pick:AddColorPicker({ Name = "Color picker", Flag = "Color", Default = Color3.fr
 local Misc = More:AddSection({ Name = "Misc (collapsed)", Side = "Right", Collapsed = true })
 local Bar = Misc:AddProgress({ Name = "Progress", Flag = "Progress", Default = 35, NoSave = true })
 Misc:AddButton({ Name = "Animate progress", Callback = function() for i = 0, 100, 5 do Bar:Set(i); task.wait(0.05) end end })
-Misc:AddButton({ Name = "Warning", Callback = function() Nebula:Notify({ Title = "Careful", Content = "Something looks off.", Type = "Warning" }) end })
-Misc:AddButton({ Name = "Error",   Callback = function() Nebula:Notify({ Title = "Error", Content = "Access denied.", Type = "Error" }) end })
+Misc:AddButton({ Name = "Warning", Callback = function() Yqantg:Notify({ Title = "Careful", Content = "Something looks off.", Type = "Warning" }) end })
+Misc:AddButton({ Name = "Error",   Callback = function() Yqantg:Notify({ Title = "Error", Content = "Access denied.", Type = "Error" }) end })
 
 ----------------------------------------------------------------------
 Window:AddTab({ Name = "Premium", Locked = true, LockedMessage = "You are not whitelisted." })
 Window:AddConfigTab("Config")      -- save / load / delete / auto-load UI
 
-Nebula:Notify({ Title = "Loaded", Content = "RightShift = hide · gear = settings", Type = "Info" })
+Yqantg:Notify({ Title = "Loaded", Content = "RightShift = hide · gear = settings", Type = "Info" })
 
 --[[ API
-    Nebula:SetTheme("Obsidian" | "Eclipse" | "Graphite")   Nebula:SetDepth(0..1.5)
-    Nebula.Parallax / BlurEnabled / SoundEnabled / BlockInput = true|false
-    Nebula.Flags.Slider          Nebula.Options.Mode:Set("Fast")
-    Nebula:SaveConfig(n) / LoadConfig(n) / LoadAuto()
-    Window:Toggle() / Minimize() / Close() / Destroy()     Nebula:Unload()
+    Yqantg:SetTheme("Obsidian" | "Eclipse" | "Graphite")   Yqantg:SetDepth(0..1.5)
+    Yqantg.Parallax / BlurEnabled / SoundEnabled / BlockInput = true|false
+    Yqantg.Flags.Slider          Yqantg.Options.Mode:Set("Fast")
+    Yqantg:SaveConfig(n) / LoadConfig(n) / LoadAuto()
+    Window:Toggle() / Minimize() / Close() / Destroy()     Yqantg:Unload()
 ]]
