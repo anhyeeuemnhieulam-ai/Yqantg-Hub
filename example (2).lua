@@ -63,6 +63,39 @@ Misc:AddButton({ Name = "Warning", Callback = function() Yqantg:Notify({ Title =
 Misc:AddButton({ Name = "Error",   Callback = function() Yqantg:Notify({ Title = "Error", Content = "Access denied.", Type = "Error" }) end })
 
 ----------------------------------------------------------------------
+local Dev = Window:AddTab("Dev")
+
+local Rng = Dev:AddSection({ Name = "Range & Alpha", Side = "Left" })
+Rng:AddRangeSlider({ Name = "Range slider", Flag = "Range", Min = 0, Max = 100, DefaultMin = 20, DefaultMax = 70, Callback = function(a, b) print("Range", a, b) end })
+Rng:AddColorPicker({ Name = "Color + alpha", Flag = "ColorA", Default = Color3.fromRGB(120, 200, 255), AlphaDefault = 0.8, Callback = function(c, a) print("Color", c, "alpha", a) end })
+Rng:AddButton({
+    Name = "Notify with buttons",
+    Callback = function()
+        Yqantg:Notify({
+            Title = "Clean memory?", Content = "Free RAM and flush caches now.", Duration = 8, Type = "Info",
+            Buttons = { { Text = "Clean", Callback = function() Yqantg:Clean() end }, { Text = "Later" } },
+        })
+    end,
+})
+
+local Con = Dev:AddSection({ Name = "Console", Side = "Right" })
+local Log = Con:AddConsole({ Height = 140 })
+Log:Log("Console ready", "Success")
+
+-- memory cleaner API: anything tracked is cleaned by the Settings button / Auto Clear
+local beat = Yqantg:Track(game:GetService("RunService").Heartbeat:Connect(function() end)) -- Disconnect()
+local tmp  = Yqantg:Track(Instance.new("Folder"))                                           -- Destroy()
+local seen = Yqantg:NewCache("k")                                                           -- weak cache, flushed
+Yqantg:RegisterCleaner("my cache", function() table.clear(seen) end)
+Con:AddButton({
+    Name = "Clean now (logs result)",
+    Callback = function()
+        local r = Yqantg:Clean()
+        if r then Log:Log(("freed %.2f MB · %d handlers · %d objects"):format(r.Freed, r.Conns + r.Dead, r.Objects), "Success") end
+    end,
+})
+
+----------------------------------------------------------------------
 Window:AddTab({ Name = "Premium", Locked = true, LockedMessage = "You are not whitelisted." })
 Window:AddConfigTab("Config")      -- save / load / delete / auto-load UI
 
