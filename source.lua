@@ -32,23 +32,217 @@
     Usage: see example.lua
 ]]
 
-local Players          = game:GetService("Players")
-local TweenService     = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService       = game:GetService("RunService")
-local CoreGui          = game:GetService("CoreGui")
-local HttpService      = game:GetService("HttpService")
-local Lighting         = game:GetService("Lighting")
-local ContextActionService = game:GetService("ContextActionService")
+-- optional executor APIs are always nil-checked: the library runs from UNC 0% upward
+local function svc(name)
+    local s = game:GetService(name)
+    if cloneref then
+        local ok, c = pcall(cloneref, s)
+        if ok and c then return c end
+    end
+    return s
+end
 
+local Players          = svc("Players")
+local TweenService     = svc("TweenService")
+local UserInputService = svc("UserInputService")
+local RunService       = svc("RunService")
+local CoreGui          = svc("CoreGui")
+local HttpService      = svc("HttpService")
+local Lighting         = svc("Lighting")
+local ContextActionService = svc("ContextActionService")
+
+
+if not game:IsLoaded() then pcall(function() game.Loaded:Wait() end) end
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    repeat task.wait() until Players.LocalPlayer
+    LocalPlayer = Players.LocalPlayer
+end
+
+----------------------------------------------------------------------
+-- Executor compatibility layer
+-- Every executor function is optional. Missing ones fall back to something that still works:
+--   files     -> in-memory store (configs work for the session)
+--   http      -> HttpGet -> request/http_request/syn.request/... -> HttpGetAsync -> HttpService
+--   clipboard -> setclipboard / toclipboard / set_clipboard / Clipboard.set / syn.write_clipboard
+--   gui mount -> gethui -> CoreGui -> PlayerGui
+--   images    -> need writefile + getcustomasset, otherwise skipped (drawn icons stay)
+----------------------------------------------------------------------
+local Compat = {}
+do
+    local mem = { files = {}, folders = {} }
+    local function has(f) return f ~= nil and f ~= false end
+    local function norm(p) return (tostring(p):gsub("\\", "/")) end
+
+    Compat.canFiles  = has(writefile) and has(readfile) and has(isfile)
+    Compat.canAssets = has(writefile) and (has(getcustomasset) or has(getsynasset))
+
+    do
+        local ok, name = pcall(function() if identifyexecutor then return (identifyexecutor()) end end)
+        Compat.executor = (ok and name) and tostring(name) or "Unknown"
+    end
+
+    ---------------------------------------------- files
+    function Compat.makefolder(p)
+        p = norm(p)
+        local acc = ""
+        for seg in p:gmatch("[^/]+") do
+            acc = acc == "" and seg or (acc .. "/" .. seg)
+            if has(makefolder) then
+                local ok, ex = pcall(function() return has(isfolder) and isfolder(acc) end)
+                if not (ok and ex) then pcall(makefolder, acc) end
+            end
+            mem.folders[acc] = true
+        end
+    end
+    function Compat.isfolder(p)
+        p = norm(p)
+        if has(isfolder) then
+            local ok, r = pcall(isfolder, p)
+            if ok and r then return true end
+        end
+        return mem.folders[p] == true
+    end
+    function Compat.writefile(p, data)
+        p = norm(p)
+        mem.files[p] = tostring(data)
+        if has(writefile) then
+            local folder = p:match("^(.*)/[^/]+$")
+            if folder then Compat.makefolder(folder) end
+            local ok = pcall(writefile, p, data)
+            return true, ok          -- (saved, persisted to disk)
+        end
+        return true, false
+    end
+    function Compat.isfile(p)
+        p = norm(p)
+        if has(isfile) then
+            local ok, r = pcall(isfile, p)
+            if ok and r then return true end
+        end
+        return mem.files[p] ~= nil
+    end
+    function Compat.readfile(p)
+        p = norm(p)
+        if has(readfile) then
+            local ok, r = pcall(readfile, p)
+            if ok and type(r) == "string" then return r end
+        end
+        return mem.files[p]
+    end
+    function Compat.delfile(p)
+        p = norm(p)
+        mem.files[p] = nil
+        if has(delfile) then pcall(delfile, p) end
+        return true
+    end
+    function Compat.listfiles(folder)
+        folder = norm(folder)
+        local out, seen = {}, {}
+        if has(listfiles) then
+            local ok, r = pcall(listfiles, folder)
+            if ok and type(r) == "table" then
+                for _, f in ipairs(r) do
+                    f = norm(f)
+                    if not seen[f] then seen[f] = true; out[#out + 1] = f end
+                end
+            end
+        end
+        for f in pairs(mem.files) do
+            if f:sub(1, #folder + 1) == folder .. "/" and not seen[f] then
+                seen[f] = true; out[#out + 1] = f
+            end
+        end
+        return out
+    end
+
+    ---------------------------------------------- http
+    local function requestFns()
+        local list = {}
+        if syn and syn.request then list[#list + 1] = syn.request end
+        if http and http.request then list[#list + 1] = http.request end
+        if fluxus and fluxus.request then list[#list + 1] = fluxus.request end
+        if has(http_request) then list[#list + 1] = http_request end
+        if has(request) then list[#list + 1] = request end
+        return list
+    end
+    Compat.canHttp = function()
+        if #requestFns() > 0 then return true end
+        return pcall(function() return game.HttpGet end) and true or false
+    end
+    function Compat.get(url)
+        local function good(r) return type(r) == "string" and #r > 0 end
+        local ok, res = pcall(function() return game:HttpGet(url) end)
+        if ok and good(res) then return res end
+        for _, fn in ipairs(requestFns()) do
+            local ok2, r = pcall(fn, { Url = url, Method = "GET" })
+            if ok2 and type(r) == "table" and good(r.Body) and (r.StatusCode == nil or (r.StatusCode >= 200 and r.StatusCode < 300)) then
+                return r.Body
+            end
+        end
+        ok, res = pcall(function() return game:HttpGetAsync(url) end)
+        if ok and good(res) then return res end
+        ok, res = pcall(function() return HttpService:GetAsync(url) end)
+        if ok and good(res) then return res end
+    end
+
+    ---------------------------------------------- clipboard
+    local function clipFns()
+        local list = {}
+        if has(setclipboard) then list[#list + 1] = setclipboard end
+        if has(toclipboard) then list[#list + 1] = toclipboard end
+        if has(set_clipboard) then list[#list + 1] = set_clipboard end
+        if Clipboard and Clipboard.set then list[#list + 1] = Clipboard.set end
+        if syn and syn.write_clipboard then list[#list + 1] = syn.write_clipboard end
+        return list
+    end
+    Compat.canClip = function() return #clipFns() > 0 end
+    function Compat.copy(text)
+        text = tostring(text)
+        for _, fn in ipairs(clipFns()) do
+            if pcall(fn, text) then return true end
+        end
+        return false
+    end
+
+    ---------------------------------------------- gui mount
+    function Compat.mountGui(g)
+        if syn and syn.protect_gui then pcall(syn.protect_gui, g)
+        elseif has(protect_gui) then pcall(protect_gui, g)
+        elseif has(protectgui) then pcall(protectgui, g) end
+
+        if has(gethui) then
+            local ok = pcall(function() g.Parent = gethui() end)
+            if ok and g.Parent then return "gethui" end
+        end
+        local ok = pcall(function() g.Parent = CoreGui end)
+        if ok and g.Parent then return "CoreGui" end
+        g.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 15)
+        return "PlayerGui"
+    end
+
+    ---------------------------------------------- report
+    function Compat.report()
+        return {
+            Executor  = Compat.executor,
+            Files     = Compat.canFiles,       -- configs persist on disk (otherwise: this session only)
+            Assets    = Compat.canAssets,      -- web images (anime icons / backgrounds / social pictures)
+            Http      = Compat.canHttp(),
+            Clipboard = Compat.canClip(),
+            HiddenUI  = has(gethui),
+            CloneRef  = has(cloneref),
+        }
+    end
+end
 
 local Nebula = {
-    Version      = "2.1.0",
+    Version      = "2.2.0",
     Depth        = 1,        -- 3D intensity (0 = flat, 1 = default, 1.5 = max)
     Parallax     = true,     -- window follows cursor with depth
     BlurEnabled  = true,     -- backdrop blur while a window is open
     SoundEnabled = true,
+    SoundVolume  = 1,        -- 0..1.5 multiplier for all sound cues
+    Tooltips     = true,
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
     AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
     Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
@@ -194,7 +388,7 @@ function Nebula:_sfx(kind)
     local id = self.SoundIds[kind] or self.SoundIds.Click
     if not id then return end
     local speed = ({ Click = 1, Toggle = 1.25, Open = 0.85, Close = 0.7, Notify = 1.5 })[kind] or 1
-    local snd = create("Sound", { SoundId = id, Volume = 0.25, PlaybackSpeed = speed, Parent = self._gui })
+    local snd = create("Sound", { SoundId = id, Volume = 0.25 * (self.SoundVolume or 1), PlaybackSpeed = speed, Parent = self._gui })
     pcall(function() snd:Play() end)
     task.delay(2.5, function() snd:Destroy() end)
 end
@@ -241,30 +435,16 @@ function Nebula:_lock(key, on)
 end
 
 -- images from the web (executor needs writefile + getcustomasset) ---------
-local function httpGet(url)
-    local ok, res = pcall(function() return game:HttpGet(url) end)
-    if ok and type(res) == "string" and #res > 0 then return res end
-    local req = (syn and syn.request) or (http and http.request) or http_request or request
-    if req then
-        local ok2, r = pcall(req, { Url = url, Method = "GET" })
-        if ok2 and type(r) == "table" and type(r.Body) == "string" and #r.Body > 0 then return r.Body end
-    end
-end
+local httpGet = Compat.get
 
 local imgCache, imgN = {}, 0
 function Nebula:_download(url)
     if imgCache[url] then return imgCache[url] end
     local toAsset = getcustomasset or getsynasset
-    if not (writefile and toAsset) then return nil end
+    if not (Compat.canAssets and toAsset) then return nil end
     local body = httpGet(url)
     if not body then return nil end
-    pcall(function()
-        if makefolder then
-            local root = self.ImageFolder:match("^[^/]+")
-            if not isfolder(root) then makefolder(root) end
-            if not isfolder(self.ImageFolder) then makefolder(self.ImageFolder) end
-        end
-    end)
+    Compat.makefolder(self.ImageFolder)
     imgN = imgN + 1
     local ext = (url:match("%.(%a+)$") or url:match("%.(%a+)%?") or "png"):lower()
     local path = ("%s/img_%d_%d.%s"):format(self.ImageFolder, os.time(), imgN, ext)
@@ -297,7 +477,7 @@ function Nebula:_randomAnime()
 end
 
 function Nebula:_warmPool(n)
-    if self._warming or not self.AnimeIcons then return end
+    if self._warming or not self.AnimeIcons or not Compat.canAssets then return end
     self._warming = true
     self._pool = self._pool or {}
     task.spawn(function()
@@ -327,7 +507,7 @@ function Nebula:_image(src, cb)
     if src == false then return end
     if type(src) == "table" then src = src[math.random(#src)] end
     if src == nil or src == true or src == "anime" then
-        if self.AnimeIcons then pickAnime(self, cb) end
+        if self.AnimeIcons and Compat.canAssets then pickAnime(self, cb) end
         return
     end
     if type(src) == "number" or (type(src) == "string" and src:match("^%d+$")) then
@@ -642,12 +822,7 @@ function Nebula:_ensureGui()
         ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     })
-    if syn and syn.protect_gui then pcall(syn.protect_gui, g) end
-
-    local ok = false
-    if gethui then ok = pcall(function() g.Parent = gethui() end) end
-    if not ok or not g.Parent then ok = pcall(function() g.Parent = CoreGui end) end
-    if not ok or not g.Parent then g.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    Compat.mountGui(g)
 
     self._gui = g
     self:_startAnimator()
@@ -683,6 +858,7 @@ function Nebula:_buildTip(g)
 end
 
 function Nebula:_showTip(str)
+    if self.Tooltips == false then return end
     local t = self._tip
     if not t then return end
     t.tok = t.tok + 1
@@ -996,18 +1172,18 @@ end
 -- Config
 ----------------------------------------------------------------------
 function Nebula:ListConfigs()
-    local out = {}
-    if listfiles and isfolder and isfolder(self.ConfigFolder) then
-        for _, f in ipairs(listfiles(self.ConfigFolder)) do
+    local out, seenN = {}, {}
+    do
+        for _, f in ipairs(Compat.listfiles(self.ConfigFolder)) do
             local n = tostring(f):match("([^/\\]+)%.json$")
-            if n then table.insert(out, n) end
+            if n and n ~= "autoload" and not seenN[n] then seenN[n] = true; table.insert(out, n) end
         end
     end
     return out
 end
 
 function Nebula:SaveConfig(name)
-    if not (writefile and makefolder) or not name or name == "" then return false end
+    if not name or name == "" then return false end
     local data = {}
     for flag, v in pairs(self.Flags) do
         local opt = self.Options[flag]
@@ -1015,16 +1191,16 @@ function Nebula:SaveConfig(name)
         elseif typeof(v) == "Color3" then data[flag] = { __c3 = { v.R, v.G, v.B } }
         elseif type(v) ~= "userdata" and not (opt and opt.NoSave) then data[flag] = v end
     end
-    pcall(function() if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end end)
-    local ok = pcall(writefile, self.ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(data))
+    Compat.makefolder(self.ConfigFolder)
+    local ok = Compat.writefile(self.ConfigFolder .. "/" .. name .. ".json", HttpService:JSONEncode(data))
     return ok
 end
 
 function Nebula:LoadConfig(name)
-    if not (readfile and isfile) or not name then return false end
+    if not name then return false end
     local path = self.ConfigFolder .. "/" .. name .. ".json"
-    if not isfile(path) then return false end
-    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+    if not Compat.isfile(path) then return false end
+    local ok, data = pcall(function() return HttpService:JSONDecode(Compat.readfile(path)) end)
     if not ok then return false end
     for flag, v in pairs(data) do
         local opt = self.Options[flag]
@@ -1037,28 +1213,27 @@ function Nebula:LoadConfig(name)
 end
 
 function Nebula:DeleteConfig(name)
-    if not (delfile and isfile) or not name then return false end
+    if not name then return false end
     local path = self.ConfigFolder .. "/" .. name .. ".json"
-    if not isfile(path) then return false end
-    return (pcall(delfile, path))
+    if not Compat.isfile(path) then return false end
+    return Compat.delfile(path)
 end
 
 function Nebula:SetAutoLoad(name)
-    if not writefile then return false end
     local path = self.ConfigFolder .. "/autoload.txt"
-    pcall(function() if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end end)
+    Compat.makefolder(self.ConfigFolder)
     if name and name ~= "" then
-        return (pcall(writefile, path, name))
+        return (Compat.writefile(path, name))
     end
-    if isfile and delfile and isfile(path) then pcall(delfile, path) end
+    if Compat.isfile(path) then Compat.delfile(path) end
     return true
 end
 
 function Nebula:GetAutoLoad()
     local path = self.ConfigFolder .. "/autoload.txt"
-    if readfile and isfile and isfile(path) then
-        local ok, n = pcall(readfile, path)
-        if ok and n and n ~= "" then return n end
+    if Compat.isfile(path) then
+        local n = Compat.readfile(path)
+        if n and n ~= "" then return n end
     end
 end
 
@@ -2030,9 +2205,12 @@ function Section:AddOwner(o)
     btn.MouseEnter:Connect(function() oh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(102, 32) }, Enum.EasingStyle.Back) end)
     btn.MouseLeave:Connect(function() oh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(96, 30) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
-        if setclipboard and o.Link then pcall(setclipboard, o.Link) end
-        btnL.Text = "COPIED!"
-        Nebula:Notify({ Title = "Link copied", Content = o.Link or "", Type = "Success", Duration = 2.5 })
+        local copied = o.Link ~= nil and Compat.copy(o.Link)
+        btnL.Text = copied and "COPIED!" or "SEE LINK"
+        Nebula:Notify({
+            Title = copied and "Link copied" or "Clipboard not supported", Content = o.Link or "",
+            Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
+        })
         task.delay(1.6, function() btnL.Text = "COPY LINK" end)
         if o.Callback then task.spawn(o.Callback) end
     end)
@@ -2165,9 +2343,12 @@ function Section:AddSocial(o)
     btn.MouseEnter:Connect(function() bh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(92, 32) }, Enum.EasingStyle.Back) end)
     btn.MouseLeave:Connect(function() bh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(86, 30) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
-        if setclipboard then pcall(setclipboard, link) end
-        btnL.Text = "COPIED!"
-        Nebula:Notify({ Title = isYT and "YouTube link copied" or "Discord link copied", Content = link, Type = "Success", Duration = 2.5 })
+        local copied = Compat.copy(link)
+        btnL.Text = copied and "COPIED!" or "SEE LINK"
+        Nebula:Notify({
+            Title = copied and (isYT and "YouTube link copied" or "Discord link copied") or "Clipboard not supported",
+            Content = link, Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
+        })
         task.delay(1.6, function() btnL.Text = "COPY LINK" end)
         if o.Callback then task.spawn(o.Callback) end
     end)
@@ -2487,8 +2668,91 @@ function Nebula:CreateWindow(cfg)
     bind(cx, "TextColor3", "SubText")
     local minBtn = topButton(42)
     bar(minBtn, 0, 0, 10, 2)
-    local setBtn = topButton(74)
-    bar(setBtn, 0, -4, 12, 2); bar(setBtn, 0, 0, 12, 2); bar(setBtn, 0, 4, 12, 2)
+    -- settings gear: centre of the top bar. hover = metallic black/white sheen + spin, hold = fast spin + glow
+    local panelOpen, setPanel = false, nil
+
+    local function buildGear(parent, px, color, z)
+        local k = px / 26
+        local holder = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(px, px),
+            BackgroundTransparency = 1, ZIndex = z, Parent = parent,
+        })
+        for n = 0, 7 do
+            local a = math.rad(n * 45)
+            local tooth = create("Frame", {
+                AnchorPoint = Vector2.new(.5, .5),
+                Position = UDim2.new(.5, math.sin(a) * 9.4 * k, .5, -math.cos(a) * 9.4 * k),
+                Size = UDim2.fromOffset(4.4 * k, 4 * k), Rotation = n * 45, BorderSizePixel = 0, ZIndex = z, Parent = holder,
+            })
+            create("UICorner", { CornerRadius = UDim.new(0, 1.2 * k), Parent = tooth })
+            paintTo(tooth, "BackgroundColor3", color)
+        end
+        local ring = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(9 * k, 9 * k),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z, Parent = holder,
+        })
+        create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = ring })
+        local st = create("UIStroke", { Thickness = 3.2 * k, Parent = ring })
+        paintTo(st, "Color", color)
+        return holder
+    end
+
+    local gearBtn = create("TextButton", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(32, 32),
+        BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = top,
+    })
+    bind(gearBtn, "BackgroundColor3", "Element")
+    corner(gearBtn, 16)
+    local metal = create("Frame", {
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2, Parent = gearBtn,
+    })
+    local metalG = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+            ColorSequenceKeypoint.new(0.3, Color3.fromRGB(150, 150, 158)),
+            ColorSequenceKeypoint.new(0.55, Color3.fromRGB(248, 248, 250)),
+            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(112, 112, 120)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+        }), Rotation = 45, Parent = metal,
+    })
+    local gear = buildGear(gearBtn, 26, WHITE, 3)
+    local gStroke, _, gSpin = glowStroke(gearBtn, 1.4, 80, 0.45, { idle = true, gate = vgate })
+
+    local hovering, holding, holdTrack = false, false, nil
+    local spinV, spinR, lastT = 0, 0, os.clock()
+    local function applyGear()
+        local active = hovering or holding or panelOpen
+        tween(metal, 0.28, { BackgroundTransparency = holding and 0 or (active and 0.1 or 1) })
+        iconTween(gear, 0.2, active and BLACK or WHITE)
+        tween(gStroke, 0.25, { Thickness = holding and 2.8 or 1.4, Transparency = active and 0 or 0.45 })
+        gSpin.entry.on = active
+        local sz = holding and 28 or (hovering and 37 or 32)
+        tween(gearBtn, 0.3, { Size = UDim2.fromOffset(sz, sz) }, Enum.EasingStyle.Back)
+    end
+    animate(gearBtn, function(t)
+        local dt = math.min(t - lastT, 0.1); lastT = t
+        local target = holding and 540 or (hovering and 110 or (panelOpen and 34 or 0))
+        spinV = spinV + (target - spinV) * math.min(dt * 6, 1)
+        spinR = (spinR + spinV * dt) % 360
+        gear.Rotation = spinR
+        metalG.Rotation = (t * (holding and 330 or 130)) % 360
+    end, vgate)
+    gearBtn.MouseEnter:Connect(function() hovering = true; applyGear() end)
+    gearBtn.MouseLeave:Connect(function() hovering = false; applyGear() end)
+    gearBtn.InputBegan:Connect(function(i)
+        if isPress(i) and not holdTrack then holdTrack = i; holding = true; applyGear() end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if holdTrack and ownsEnd(holdTrack, i) then
+            holdTrack = nil; holding = false
+            if i.UserInputType == Enum.UserInputType.Touch then hovering = false end
+            applyGear()
+        end
+    end)
+    gearBtn.MouseButton1Click:Connect(function()
+        Nebula:_sfx("Click")
+        if setPanel then setPanel(not panelOpen) end
+    end)
 
     closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = WHITE }); cx.TextColor3 = Color3.new(0, 0, 0) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = resolve("Element") }); cx.TextColor3 = resolve("SubText") end)
@@ -2601,130 +2865,308 @@ function Nebula:CreateWindow(cfg)
         end
     end)
 
-    ------------------------------------------------ settings panel
+    ------------------------------------------------ settings panel (opens from the gear)
+    local PW = 296
+    local refreshers = {}
+    local scrim = create("TextButton", {
+        Position = UDim2.fromOffset(0, TOP), Size = UDim2.new(1, 0, 1, -TOP), BackgroundTransparency = 1,
+        Text = "", AutoButtonColor = false, Visible = false, ZIndex = 28, Parent = Main,
+    })
     local panel = create("CanvasGroup", {
-        AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, TOP + 6), Size = UDim2.fromOffset(210, 0),
-        AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, ZIndex = 30, Parent = Main,
+        AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, 0, TOP + 10), Size = UDim2.fromOffset(PW, 300),
+        BorderSizePixel = 0, Visible = false, ZIndex = 30, Parent = Main,
     })
     bind(panel, "BackgroundColor3", "Side")
-    corner(panel, 10)
-    stroke(panel, "Accent", 1, 0.3)
-    create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = panel })
-    create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = panel })
+    corner(panel, 14)
+    sheen(panel, 70, 150)
+    glowStroke(panel, 1.4, 60, 0.15, { gate = function() return panelOpen end })
 
-    local ph = text(panel, "Settings", 14, "Text", Enum.Font.GothamBold)
-    ph.Size = UDim2.new(1, 0, 0, 18); ph.LayoutOrder = 1
-    local pt = text(panel, "THEME", 10, "SubText", Enum.Font.GothamBold)
-    pt.Size = UDim2.new(1, 0, 0, 12); pt.LayoutOrder = 2
+    -- header
+    local hIcon = create("Frame", {
+        Position = UDim2.fromOffset(12, 9), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 31, Parent = panel,
+    })
+    corner(hIcon, 9)
+    local hg = gradient(hIcon, "AccentGrad")
+    local hGear = buildGear(hIcon, 20, BLACK, 32)
+    animate(panel, function(t)
+        hg.Rotation = 45 + math.sin(t * 1.5) * 40
+        hGear.Rotation = (t * 40) % 360
+    end, function() return panelOpen end)
+    local hTitle = text(panel, "Settings", 15, "Text", Enum.Font.GothamBold)
+    hTitle.Position = UDim2.fromOffset(50, 6); hTitle.Size = UDim2.new(1, -96, 0, 18); hTitle.ZIndex = 31
+    local hTg = gradient(hTitle, "TextGrad")
+    animate(hTitle, function(t) hTg.Offset = Vector2.new(math.sin(t * 1.2) * 0.55, 0) end, function() return panelOpen end)
+    local hSub = text(panel, "Customize your interface", 10, "SubText", Enum.Font.Gotham)
+    hSub.Position = UDim2.fromOffset(50, 24); hSub.Size = UDim2.new(1, -96, 0, 14); hSub.ZIndex = 31
+    local pClose = create("TextButton", {
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, 0, 22), Size = UDim2.fromOffset(26, 26),
+        BorderSizePixel = 0, AutoButtonColor = false, Text = "", ZIndex = 31, Parent = panel,
+    })
+    bind(pClose, "BackgroundColor3", "Element")
+    corner(pClose, 8)
+    local pcx = drawIcon(pClose, "cross", { size = 11, color = "SubText", z = 32, thick = 1.8 })
+    pClose.MouseEnter:Connect(function() tween(pClose, 0.15, { BackgroundColor3 = WHITE }); iconTween(pcx, 0.15, BLACK) end)
+    pClose.MouseLeave:Connect(function() tween(pClose, 0.15, { BackgroundColor3 = resolve("Element") }); iconTween(pcx, 0.15, resolve("SubText")) end)
+    local sep = create("Frame", { Position = UDim2.fromOffset(0, 43), Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, ZIndex = 31, Parent = panel })
+    bind(sep, "BackgroundColor3", "Stroke")
 
-    local order = 3
-    local themeNames = {}
-    for n in pairs(self.Themes) do themeNames[#themeNames + 1] = n end
-    table.sort(themeNames)
-    local themeBtns = {}
-    for _, n in ipairs(themeNames) do
-        local b = create("TextButton", { Size = UDim2.new(1, 0, 0, 26), BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = order, ZIndex = 31, Parent = panel })
-        order = order + 1
-        bind(b, "BackgroundColor3", "Element")
-        corner(b, 7)
-        local dot = create("Frame", { Position = UDim2.fromOffset(8, 8), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = self.Themes[n].Accent, BorderSizePixel = 0, ZIndex = 32, Parent = b })
-        corner(dot, 5)
-        local tl = text(b, n, 12, "Text"); tl.Position = UDim2.fromOffset(26, 0); tl.Size = UDim2.new(1, -30, 1, 0); tl.ZIndex = 32
-        local st = stroke(b, "Accent", 1, 1)
-        themeBtns[n] = st
-        b.MouseButton1Click:Connect(function() Nebula:SetTheme(n) end)
+    local scroll = create("ScrollingFrame", {
+        Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 1, -44), BackgroundTransparency = 1, BorderSizePixel = 0,
+        ScrollBarThickness = 3, ScrollBarImageColor3 = Color3.fromRGB(150, 150, 158), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(), ScrollingDirection = Enum.ScrollingDirection.Y, ZIndex = 31, Parent = panel,
+    })
+    create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = scroll })
+    create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+
+    local cardOrder, rowN = 0, setmetatable({}, { __mode = "k" })
+    local function nextLO(c) rowN[c] = (rowN[c] or 0) + 1; return rowN[c] end
+    local function card(title)
+        cardOrder = cardOrder + 1
+        local c = create("Frame", {
+            Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0,
+            LayoutOrder = cardOrder, ZIndex = 32, Parent = scroll,
+        })
+        bind(c, "BackgroundColor3", "Element")
+        corner(c, 10)
+        stroke(c, "Stroke", 1, 0.55)
+        create("UIPadding", { PaddingTop = UDim.new(0, 9), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = c })
+        create("UIListLayout", { Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder, Parent = c })
+        if title then
+            local h = text(c, title, 10, "SubText", Enum.Font.GothamBold)
+            h.Size = UDim2.new(1, 0, 0, 12); h.LayoutOrder = nextLO(c); h.ZIndex = 33
+        end
+        return c
     end
-    onTheme(function() for n, st in pairs(themeBtns) do st.Transparency = (n == Nebula.CurrentTheme) and 0.1 or 1 end end)
-    themeBtns[self.CurrentTheme].Transparency = 0.1
 
-    local sl = text(panel, "UI SCALE", 10, "SubText", Enum.Font.GothamBold)
-    sl.Size = UDim2.new(1, 0, 0, 12); sl.LayoutOrder = order; order = order + 1
-    local scaleRow = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 31, Parent = panel })
-    local pctL = create("TextLabel", { BackgroundTransparency = 1, Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -64, 1, 0), Text = "", TextSize = 12, Font = Enum.Font.GothamBold, ZIndex = 32, Parent = scaleRow })
-    bind(pctL, "TextColor3", "Text")
-    local function scaleBtn(txt, anchorX, dx)
-        local b = create("TextButton", { AnchorPoint = Vector2.new(anchorX, 0), Position = UDim2.new(anchorX, dx, 0, 0), Size = UDim2.fromOffset(26, 26), BorderSizePixel = 0, Text = txt, TextSize = 14, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 32, Parent = scaleRow })
-        bind(b, "BackgroundColor3", "Element"); bind(b, "TextColor3", "Text")
-        corner(b, 7)
-        return b
-    end
-    local function setScale(s)
-        Window._scale = math.clamp(math.floor(s * 10 + 0.5) / 10, 0.5, 1.5)
-        scale.Scale = Window._scale
-        pctL.Text = math.floor(Window._scale * 100 + 0.5) .. "%"
-    end
-    scaleBtn("-", 0, 0).MouseButton1Click:Connect(function() setScale(Window._scale - 0.1) end)
-    scaleBtn("+", 1, 0).MouseButton1Click:Connect(function() setScale(Window._scale + 0.1) end)
-    setScale(base)
+    local function pct(v) return math.floor(v * 100 + 0.5) .. "%" end
 
-    local function miniToggle(label, lo, get, set)
-        local r = create("TextButton", { Size = UDim2.new(1, 0, 0, 24), BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = lo, ZIndex = 31, Parent = panel })
-        bind(r, "BackgroundColor3", "Element")
-        corner(r, 7)
-        local tl = text(r, label, 11, "Text"); tl.Position = UDim2.fromOffset(8, 0); tl.Size = UDim2.new(1, -50, 1, 0); tl.ZIndex = 32
-        local tr = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0), Size = UDim2.fromOffset(28, 14), BorderSizePixel = 0, ZIndex = 32, Parent = r })
-        corner(tr, 7)
-        local kn = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 2, .5, 0), Size = UDim2.fromOffset(10, 10), BorderSizePixel = 0, ZIndex = 33, Parent = tr })
-        corner(kn, 5)
+    local function toggleRow(c, label, get, set)
+        local r = create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Text = "", AutoButtonColor = false,
+            LayoutOrder = nextLO(c), ZIndex = 33, Parent = c,
+        })
+        local tl = text(r, label, 12, "Text"); tl.Size = UDim2.new(1, -50, 1, 0); tl.ZIndex = 34
+        local tr = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, 0, .5, 0), Size = UDim2.fromOffset(36, 20), BorderSizePixel = 0, ZIndex = 34, Parent = r })
+        corner(tr, 10)
+        local kn = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 3, .5, 0), Size = UDim2.fromOffset(14, 14), BorderSizePixel = 0, ZIndex = 35, Parent = tr })
+        corner(kn, 7)
         local function render()
             local on = get()
             tween(tr, 0.2, { BackgroundColor3 = on and WHITE or resolve("Panel") })
-            tween(kn, 0.35, {
-                Position = on and UDim2.new(1, -12, .5, 0) or UDim2.new(0, 2, .5, 0),
+            tween(kn, 0.3, {
+                Position = on and UDim2.new(1, -17, .5, 0) or UDim2.new(0, 3, .5, 0),
                 BackgroundColor3 = on and BLACK or resolve("SubText"),
             }, Enum.EasingStyle.Back)
         end
         onTheme(render); render()
+        refreshers[#refreshers + 1] = render
         r.MouseButton1Click:Connect(function() set(not get()); render(); Nebula:_sfx("Toggle") end)
     end
-    local fxl = text(panel, "EFFECTS", 10, "SubText", Enum.Font.GothamBold)
-    fxl.Size = UDim2.new(1, 0, 0, 12); fxl.LayoutOrder = order + 1
-    miniToggle("3D parallax", order + 2, function() return Nebula.Parallax end, function(b) Nebula.Parallax = b end)
-    miniToggle("Backdrop blur", order + 3, function() return Nebula.BlurEnabled end, function(b)
-        Nebula.BlurEnabled = b; Nebula:_syncBlur()
-    end)
-    miniToggle("Sound cues", order + 4, function() return Nebula.SoundEnabled end, function(b) Nebula.SoundEnabled = b end)
-    miniToggle("Block camera drag", order + 5, function() return Nebula.BlockInput end, function(b)
-        Nebula.BlockInput = b; Nebula:_lock("refresh", false)
-    end)
-    local bgl = text(panel, "BACKGROUND IMAGE", 10, "SubText", Enum.Font.GothamBold)
-    bgl.Size = UDim2.new(1, 0, 0, 12); bgl.LayoutOrder = order + 6
-    local bgRow = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = order + 7, ZIndex = 31, Parent = panel })
-    Window._bgLabel = create("TextLabel", { BackgroundTransparency = 1, Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -64, 1, 0), Text = "", TextSize = 12, Font = Enum.Font.GothamBold, ZIndex = 32, Parent = bgRow })
-    bind(Window._bgLabel, "TextColor3", "Text")
-    for _, d in ipairs({ { "-", 0, 0.1 }, { "+", 1, -0.1 } }) do
-        local b = create("TextButton", { AnchorPoint = Vector2.new(d[2], 0), Position = UDim2.new(d[2], 0, 0, 0), Size = UDim2.fromOffset(26, 26), BorderSizePixel = 0, Text = d[1], TextSize = 14, Font = Enum.Font.GothamBold, ZIndex = 32, Parent = bgRow })
-        bind(b, "BackgroundColor3", "Element"); bind(b, "TextColor3", "Text")
-        corner(b, 7)
-        b.MouseButton1Click:Connect(function() Window:SetBackgroundTransparency(Window._bgAlpha + d[3]) end)
-    end
-    Window._bgLabel.Text = "60%"
-    local credit = text(panel, (cfg.Brand or "Nebula UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.Gotham)
-    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = order + 8; credit.TextXAlignment = Enum.TextXAlignment.Center
 
+    -- slider: follows only the finger that started on it (multi-touch safe), scroll is paused while dragging
+    local function sliderRow(c, label, lo, hi, step, get, set, fmt, commitOnRelease)
+        local r = create("Frame", { Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1, LayoutOrder = nextLO(c), ZIndex = 33, Parent = c })
+        local tl = text(r, label, 12, "Text"); tl.Size = UDim2.new(1, -60, 0, 16); tl.ZIndex = 34
+        local vl = text(r, "", 11, "Accent", Enum.Font.GothamBold)
+        vl.Size = UDim2.fromOffset(56, 16); vl.Position = UDim2.new(1, -56, 0, 0); vl.TextXAlignment = Enum.TextXAlignment.Right; vl.ZIndex = 34
+        local hit = create("TextButton", {
+            Position = UDim2.fromOffset(0, 18), Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, Text = "",
+            AutoButtonColor = false, ZIndex = 34, Parent = r,
+        })
+        local track = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.new(1, 0, 0, 6), BorderSizePixel = 0, ZIndex = 34, Parent = hit })
+        bind(track, "BackgroundColor3", "Panel")
+        corner(track, 3)
+        local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 35, Parent = track })
+        corner(fill, 3)
+        gradient(fill, "AccentGrad")
+        local knob = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(0, .5), Size = UDim2.fromOffset(16, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 36, Parent = track })
+        corner(knob, 8)
+        create("UIStroke", { Thickness = 2, Color = BLACK, Transparency = 0.55, Parent = knob })
+        local kscale = create("UIScale", { Parent = knob })
+
+        local shown
+        local function show(v)
+            shown = v
+            local a = math.clamp((v - lo) / (hi - lo), 0, 1)
+            fill.Size = UDim2.fromScale(a, 1)
+            knob.Position = UDim2.fromScale(a, .5)
+            vl.Text = fmt(v)
+        end
+        local function render() show(get()) end
+        render()
+        refreshers[#refreshers + 1] = render
+
+        local tracked, gx, gw
+        local function valueAt(x)
+            local a = math.clamp((x - gx) / math.max(gw, 1), 0, 1)
+            return math.clamp(math.floor((lo + a * (hi - lo)) / step + 0.5) * step, lo, hi)
+        end
+        local function drag(x)
+            local v = valueAt(x)
+            show(v)
+            if not commitOnRelease then set(v) end
+        end
+        local function finish()
+            if not tracked then return end
+            tracked = nil
+            scroll.ScrollingEnabled = true
+            tween(kscale, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
+            if commitOnRelease and shown ~= nil then set(shown); render() end
+        end
+        hit.InputBegan:Connect(function(i)
+            if isPress(i) and not tracked then
+                tracked = i
+                gx, gw = track.AbsolutePosition.X, track.AbsoluteSize.X
+                scroll.ScrollingEnabled = false
+                tween(kscale, 0.15, { Scale = 1.25 }, Enum.EasingStyle.Back)
+                drag(i.Position.X)
+                i.Changed:Connect(function()
+                    if i.UserInputState == Enum.UserInputState.End and tracked == i then finish() end
+                end)
+            end
+        end)
+        connect(UserInputService.InputChanged, function(i) if tracked and ownsMove(tracked, i) then drag(i.Position.X) end end)
+        connect(UserInputService.InputEnded, function(i) if tracked and ownsEnd(tracked, i) then finish() end end)
+    end
+
+    local function buttonRow(c, label, fn)
+        local b = create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+            ClipsDescendants = true, LayoutOrder = nextLO(c), ZIndex = 33, Parent = c,
+        })
+        corner(b, 8)
+        gradient(b, "BtnGrad").Rotation = 90
+        local _, _, bh = glowStroke(b, 1.2, 70, 0.4, { idle = true, gate = function() return panelOpen end })
+        local l = create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = label, ZIndex = 35,
+            TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, Parent = b,
+        })
+        b.MouseEnter:Connect(function() bh.entry.on = true end)
+        b.MouseLeave:Connect(function() bh.entry.on = false end)
+        b.MouseButton1Down:Connect(function(x) ripple(b, x, scale, 0.82) end)
+        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); fn() end)
+        return b
+    end
+
+    local function setScale(s)
+        Window._scale = math.clamp(math.floor(s * 20 + 0.5) / 20, 0.5, 1.5)
+        scale.Scale = Window._scale
+    end
+
+    -- THEME (chips)
+    local themeNames = {}
+    for n in pairs(self.Themes) do themeNames[#themeNames + 1] = n end
+    table.sort(themeNames)
+    local themeCard = card("THEME")
+    local chipRow = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = nextLO(themeCard), ZIndex = 33, Parent = themeCard })
+    create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = chipRow })
+    local nT = math.max(#themeNames, 1)
+    local themeBtns = {}
+    for idx, n in ipairs(themeNames) do
+        local b = create("TextButton", {
+            Size = UDim2.new(1 / nT, -(6 * (nT - 1)) / nT, 1, 0), BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+            LayoutOrder = idx, ZIndex = 34, Parent = chipRow,
+        })
+        bind(b, "BackgroundColor3", "Panel")
+        corner(b, 8)
+        local dot = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 8, .5, 0), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = self.Themes[n].Accent, BorderSizePixel = 0, ZIndex = 35, Parent = b })
+        corner(dot, 5)
+        create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(120, 120, 128), Transparency = 0.4, Parent = dot })
+        local tl = text(b, n, 11, "Text"); tl.Position = UDim2.fromOffset(24, 0); tl.Size = UDim2.new(1, -26, 1, 0); tl.ZIndex = 35
+        themeBtns[n] = stroke(b, "Accent", 1.4, 1)
+        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); Nebula:SetTheme(n) end)
+    end
+    local function renderThemes() for n, st in pairs(themeBtns) do st.Transparency = (n == Nebula.CurrentTheme) and 0.05 or 1 end end
+    onTheme(renderThemes); renderThemes()
+
+    -- INTERFACE
+    local uiCard = card("INTERFACE")
+    sliderRow(uiCard, "UI scale", 0.5, 1.5, 0.05, function() return Window._scale end, setScale, pct, true)
+    sliderRow(uiCard, "3D depth", 0, 1.5, 0.05, function() return Nebula.Depth end, function(v) Nebula:SetDepth(v) end, pct)
+    toggleRow(uiCard, "3D parallax", function() return Nebula.Parallax end, function(b) Nebula.Parallax = b end)
+    toggleRow(uiCard, "Backdrop blur", function() return Nebula.BlurEnabled end, function(b) Nebula.BlurEnabled = b; Nebula:_syncBlur() end)
+    toggleRow(uiCard, "Tooltips", function() return Nebula.Tooltips ~= false end, function(b) Nebula.Tooltips = b end)
+
+    -- BACKGROUND
+    local bgCard = card("BACKGROUND")
+    sliderRow(bgCard, "Image opacity", 0, 1, 0.05, function() return 1 - (Window._bgAlpha or 0.6) end,
+        function(v) Window:SetBackgroundTransparency(1 - v) end, pct)
+    buttonRow(bgCard, "NEW RANDOM BACKGROUND", function()
+        if not Compat.canAssets then
+            Nebula:Notify({ Title = "Images unavailable", Content = "This executor can't load web images.", Type = "Warning" })
+            return
+        end
+        Nebula.AnimeIcons = true
+        Window:SetBackground("anime")
+    end)
+    buttonRow(bgCard, "REMOVE BACKGROUND", function() Window:SetBackground(false) end)
+
+    -- SOUND & INPUT
+    local sndCard = card("SOUND & INPUT")
+    toggleRow(sndCard, "Sound cues", function() return Nebula.SoundEnabled end, function(b) Nebula.SoundEnabled = b end)
+    sliderRow(sndCard, "Volume", 0, 1.5, 0.05, function() return Nebula.SoundVolume or 1 end, function(v) Nebula.SoundVolume = v end, pct)
+    toggleRow(sndCard, "Block camera drag", function() return Nebula.BlockInput end, function(b) Nebula.BlockInput = b; Nebula:_lock("refresh", false) end)
+
+    -- RESET + info
+    local defaults = {
+        theme = self.CurrentTheme, scale = base, depth = Nebula.Depth, par = Nebula.Parallax, blur = Nebula.BlurEnabled,
+        snd = Nebula.SoundEnabled, vol = Nebula.SoundVolume or 1, block = Nebula.BlockInput, tips = Nebula.Tooltips ~= false, bg = 0.6,
+    }
+    local function resetAll()
+        Nebula:SetTheme(defaults.theme)
+        setScale(defaults.scale)
+        Nebula:SetDepth(defaults.depth)
+        Nebula.Parallax = defaults.par
+        Nebula.BlurEnabled = defaults.blur; Nebula:_syncBlur()
+        Nebula.SoundEnabled = defaults.snd
+        Nebula.SoundVolume = defaults.vol
+        Nebula.BlockInput = defaults.block; Nebula:_lock("refresh", false)
+        Nebula.Tooltips = defaults.tips
+        Window:SetBackgroundTransparency(defaults.bg)
+        for _, f in ipairs(refreshers) do f() end
+    end
+    local footCard = card(nil)
+    buttonRow(footCard, "RESET ALL SETTINGS", resetAll)
+    local sup = Compat.report()
+    local function onoff(b) return b and "on" or "off" end
+    local credit = text(footCard, (cfg.Brand or "Nebula UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.GothamBold)
+    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = nextLO(footCard); credit.TextXAlignment = Enum.TextXAlignment.Center; credit.ZIndex = 33
+    local info = text(footCard, ("%s  ·  files %s  ·  images %s  ·  clipboard %s"):format(sup.Executor, onoff(sup.Files), onoff(sup.Assets), onoff(sup.Clipboard)), 9, "SubText", Enum.Font.Gotham)
+    info.Size = UDim2.new(1, 0, 0, 24); info.LayoutOrder = nextLO(footCard); info.TextXAlignment = Enum.TextXAlignment.Center
+    info.TextWrapped = true; info.TextYAlignment = Enum.TextYAlignment.Top; info.ZIndex = 33
+
+    -- open / close
     local pscale = create("UIScale", { Scale = 1, Parent = panel })
-    local panelOpen, ptok = false, 0
-    local function setPanel(state)
+    local ptok = 0
+    setPanel = function(state)
         if state == panelOpen then return end
         panelOpen = state
         ptok = ptok + 1
         local my = ptok
         if state then
-            panel.GroupTransparency = 1; pscale.Scale = 0.8; panel.Visible = true
+            panel.Size = UDim2.fromOffset(PW, math.clamp(fs.Y.Offset - TOP - 22, 160, 430))
+            panel.GroupTransparency = 1; pscale.Scale = 0.55
+            panel.Position = UDim2.new(.5, 0, 0, TOP - 6)
+            panel.Visible = true; scrim.Visible = true
+            scroll.CanvasPosition = Vector2.new(0, 0)
             tween(panel, 0.25, { GroupTransparency = 0 })
-            tween(pscale, 0.45, { Scale = 1 }, Enum.EasingStyle.Back)
+            tween(panel, 0.5, { Position = UDim2.new(.5, 0, 0, TOP + 10) }, Enum.EasingStyle.Back)
+            tween(pscale, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
         else
+            scrim.Visible = false
             tween(panel, 0.18, { GroupTransparency = 1 })
-            tween(pscale, 0.2, { Scale = 0.88 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-            task.delay(0.2, function() if my == ptok then panel.Visible = false end end)
+            tween(pscale, 0.2, { Scale = 0.85 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            tween(panel, 0.2, { Position = UDim2.new(.5, 0, 0, TOP) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            task.delay(0.21, function() if my == ptok then panel.Visible = false end end)
         end
-        tween(setBtn, 0.4, { Rotation = state and 90 or 0 }, Enum.EasingStyle.Back)
+        applyGear()
     end
-    setBtn.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); setPanel(not panelOpen) end)
+    scrim.MouseButton1Click:Connect(function() setPanel(false) end)
+    pClose.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); setPanel(false) end)
 
     ------------------------------------------------ window methods (3D open / close)
     local popItems = {}
-    for _, b in ipairs({ avatar, closeBtn, minBtn, setBtn }) do
+    for _, b in ipairs({ avatar, closeBtn, minBtn, gearBtn }) do
         popItems[#popItems + 1] = create("UIScale", { Parent = b })
     end
 
@@ -3095,7 +3537,7 @@ function Nebula:CreateWindow(cfg)
             local n = nameBox.Value ~= "" and nameBox.Value or list.Value
             if n and Nebula:SaveConfig(n) then
                 list:SetOptions(Nebula:ListConfigs())
-                Nebula:Notify({ Title = "Config saved", Content = tostring(n), Type = "Success" })
+                Nebula:Notify({ Title = "Config saved", Content = tostring(n) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
             else
                 Nebula:Notify({ Title = "Save failed", Content = "Enter a name (executor must support writefile).", Type = "Error" })
             end
@@ -3174,5 +3616,9 @@ function Nebula:CreateWindow(cfg)
 
     return Window
 end
+
+Nebula.Compat = Compat
+-- what this executor supports: { Executor, Files, Assets, Http, Clipboard, HiddenUI, CloneRef }
+function Nebula:GetSupport() return Compat.report() end
 
 return Nebula
