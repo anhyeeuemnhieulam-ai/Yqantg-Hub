@@ -2490,6 +2490,212 @@ function Section:AddStats()
     return { Type = "Stats", SetVisible = function(_, b) row.Visible = b end }
 end
 
+---------------------------------------------------------------- Overview (compact info panel: fits the window, no scrolling)
+-- one call = profile + owner + YouTube/Discord + live stats + detected executor
+-- o.Owner / o.OwnerSubtitle / o.OwnerLink · o.YouTube / o.Discord (links) · o.Executor (name override)
+-- o.Support = { { "Drawing", true }, ... }  extra capability chips (max 4 chips shown)
+function Section:AddOverview(o)
+    o = o or {}
+    local rows = {}
+    local function row(h) local r = newRow(self, h); rows[#rows + 1] = r; return r end
+    local function lbl(parent, str, size, key, font, x, y, w, h)
+        local l = text(parent, str, size, key, font)
+        l.Position = UDim2.fromOffset(x, y); l.Size = w; l.Size = UDim2.new(w.X.Scale, w.X.Offset, 0, h)
+        return l
+    end
+    local function copyBtn(parent, label, w, link, what)
+        local btn = create("TextButton", {
+            AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(w, 26),
+            BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = parent,
+        })
+        corner(btn, 8)
+        gradient(btn, "BtnGrad").Rotation = 90
+        local _, _, bh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
+        local bl = create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = label, ZIndex = 4,
+            TextColor3 = WHITE, TextSize = 10, Font = Enum.Font.GothamBold, Parent = btn,
+        })
+        btn.MouseEnter:Connect(function() bh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(w + 5, 28) }, Enum.EasingStyle.Back) end)
+        btn.MouseLeave:Connect(function() bh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(w, 26) }, Enum.EasingStyle.Back) end)
+        btn.MouseButton1Click:Connect(function()
+            local copied = link ~= nil and Compat.copy(link)
+            bl.Text = copied and "COPIED!" or "SEE LINK"
+            Nebula:Notify({
+                Title = copied and (what .. " link copied") or "Clipboard not supported", Content = link or "",
+                Type = copied and "Success" or "Warning", Duration = copied and 2.5 or 6,
+            })
+            task.delay(1.6, function() bl.Text = label end)
+        end)
+        return btn
+    end
+
+    -- 1 · profile ----------------------------------------------------
+    local r1 = row(62)
+    local av = create("ImageLabel", {
+        Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(44, 44), BorderSizePixel = 0,
+        Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150", Parent = r1,
+    })
+    bind(av, "BackgroundColor3", "Panel")
+    corner(av, 22)
+    local ring = create("UIStroke", { Thickness = 2, Color = WHITE, Parent = av })
+    local ringG = gradient(ring, "GlowGrad")
+    animate(ring, function(t) ringG.Rotation = (t * 80) % 360 end, gateOf(self))
+    local dot = create("Frame", { Position = UDim2.fromOffset(42, 42), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Status.Success[1], BorderSizePixel = 0, ZIndex = 3, Parent = r1 })
+    corner(dot, 5)
+    stroke(dot, "Element", 2, 0)
+    TweenService:Create(dot, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = 0.45 }):Play()
+    lbl(r1, "WELCOME BACK", 8, "Accent", Enum.Font.GothamBold, 64, 8, UDim2.fromOffset(140, 0), 11)
+    lbl(r1, LocalPlayer.DisplayName, 15, "Text", Enum.Font.GothamBold, 64, 19, UDim2.fromOffset(140, 0), 20)
+    lbl(r1, "@" .. LocalPlayer.Name, 10, "SubText", Enum.Font.Gotham, 64, 40, UDim2.fromOffset(140, 0), 13)
+    local function pill(y, str)
+        local p = create("Frame", { Position = UDim2.fromOffset(212, y), Size = UDim2.fromOffset(104, 18), BorderSizePixel = 0, Parent = r1 })
+        bind(p, "BackgroundColor3", "Panel")
+        corner(p, 9)
+        stroke(p, "Stroke", 1, 0.3)
+        local t = text(p, str, 10, "SubText", Enum.Font.GothamBold)
+        t.Size = UDim2.fromScale(1, 1); t.TextXAlignment = Enum.TextXAlignment.Center
+    end
+    pill(10, "ID " .. LocalPlayer.UserId)
+    pill(34, LocalPlayer.AccountAge .. " days old")
+    local box = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 9), Size = UDim2.fromOffset(72, 44), BorderSizePixel = 0, Parent = r1 })
+    bind(box, "BackgroundColor3", "Panel")
+    corner(box, 10)
+    stroke(box, "Accent", 1, 0.55)
+    local pt = text(box, "PLAYERS", 8, "SubText", Enum.Font.GothamBold)
+    pt.Size = UDim2.new(1, 0, 0, 10); pt.Position = UDim2.fromOffset(0, 6); pt.TextXAlignment = Enum.TextXAlignment.Center
+    local pn = text(box, "", 18, "Text", Enum.Font.GothamBlack)
+    pn.Size = UDim2.new(1, 0, 0, 22); pn.Position = UDim2.fromOffset(0, 17); pn.TextXAlignment = Enum.TextXAlignment.Center
+    local function updPlayers() pn.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers end
+    updPlayers()
+    connect(Players.PlayerAdded, updPlayers)
+    connect(Players.PlayerRemoving, function() task.defer(updPlayers) end)
+
+    -- 2 · owner ------------------------------------------------------
+    local r2 = row(52)
+    local icon = create("Frame", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = r2 })
+    corner(icon, 10)
+    local ig = gradient(icon, "AccentGrad")
+    ig.Rotation = 45
+    create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = (o.Owner or "Yqantg Hub"):sub(1, 1):upper(),
+        TextColor3 = Color3.new(0, 0, 0), TextSize = 20, Font = Enum.Font.GothamBlack, Parent = icon,
+    })
+    animate(icon, function(t) ig.Rotation = 45 + math.sin(t * 1.5) * 40 end, gateOf(self))
+    lbl(r2, "UI LIBRARY OWNER", 8, "SubText", Enum.Font.GothamBold, 54, 6, UDim2.new(1, -160, 0, 0), 10)
+    local oname = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 16), Size = UDim2.new(1, -160, 0, 20),
+        Text = o.Owner or "Yqantg Hub", TextColor3 = WHITE, TextSize = 15, Font = Enum.Font.GothamBlack,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = r2,
+    })
+    local ng = create("UIGradient", { Parent = oname })
+    bind(ng, "Color", "TextGrad")
+    animate(oname, function(t) ng.Offset = Vector2.new(math.sin(t * 1.3) * 0.65, 0) end, gateOf(self))
+    create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 36), Size = UDim2.new(1, -160, 0, 12),
+        Text = "Verified  ·  " .. (o.OwnerSubtitle or "Official owner"), TextColor3 = Status.Success[1], TextSize = 9,
+        Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = r2,
+    })
+    local ytLink = o.YouTube == nil and "https://youtube.com/@yqantg" or o.YouTube
+    local dcLink = o.Discord == nil and "https://discord.gg/yurKERvexU" or o.Discord
+    copyBtn(r2, "COPY LINK", 86, o.OwnerLink or dcLink or ytLink, "Hub")
+
+    -- 3 · YouTube | Discord (side by side) -----------------------------
+    if ytLink or dcLink then
+        local r3 = row(52)
+        local function half(idx, kind, link, title)
+            local isYT = kind == "YouTube"
+            local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
+            local h = create("Frame", { BackgroundTransparency = 1, Position = UDim2.fromScale(idx * 0.5, 0), Size = UDim2.fromScale(0.5, 1), Parent = r3 })
+            local badgeF = create("Frame", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = h })
+            corner(badgeF, 10)
+            create("UIGradient", { Color = ColorSequence.new(brand:Lerp(BLACK, 0.45), Color3.fromRGB(12, 12, 14)), Rotation = 35, Parent = badgeF })
+            local logo = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromOffset(26, 20), ZIndex = 2, Parent = badgeF })
+            if isYT then
+                local plate = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(24, 17), BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, ZIndex = 2, Parent = logo })
+                corner(plate, 6)
+                playShape(plate, 8, 9, WHITE, 3)
+            else
+                local head = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(22, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = logo })
+                corner(head, 7)
+                for _, x in ipairs({ .32, .68 }) do
+                    local eye = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(x, .46), Size = UDim2.fromOffset(3, 6), BackgroundColor3 = brand, BorderSizePixel = 0, ZIndex = 3, Parent = head })
+                    corner(eye, 2)
+                end
+            end
+            lbl(h, isYT and "YOUTUBE" or "DISCORD", 8, "SubText", Enum.Font.GothamBold, 52, 9, UDim2.new(1, -118, 0, 0), 10)
+            lbl(h, title, 13, "Text", Enum.Font.GothamBlack, 52, 21, UDim2.new(1, -118, 0, 0), 18)
+            copyBtn(h, "COPY", 52, link, kind)
+        end
+        if ytLink then half(0, "YouTube", ytLink, o.YouTubeTitle or "@yqantg") end
+        if dcLink then half(ytLink and 1 or 0, "Discord", dcLink, o.DiscordTitle or "Community") end
+        if ytLink and dcLink then
+            local div = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.new(0, 1, 1, -20), BackgroundTransparency = 0.4, BorderSizePixel = 0, Parent = r3 })
+            bind(div, "BackgroundColor3", "Stroke")
+        end
+    end
+
+    -- 4 · live stats -------------------------------------------------
+    local r4 = row(58)
+    local function stat(x, title)
+        lbl(r4, title, 8, "Accent", Enum.Font.GothamBold, x, 6, UDim2.fromOffset(70, 0), 10)
+        local v = text(r4, "--", 20, "Text", Enum.Font.GothamBlack)
+        v.Position = UDim2.fromOffset(x, 16); v.Size = UDim2.fromOffset(70, 26)
+        return v
+    end
+    local fpsL, pingL = stat(12, "FPS"), stat(84, "PING (MS)")
+    lbl(r4, "SERVER ID  " .. tostring(game.JobId):sub(1, 8), 9, "SubText", Enum.Font.Code, 170, 9, UDim2.new(1, -182, 0, 0), 12)
+    local fillT = lbl(r4, "SERVER FILL", 8, "SubText", Enum.Font.GothamBold, 170, 27, UDim2.fromOffset(100, 0), 10)
+    local track = create("Frame", { Position = UDim2.new(0, 12, 0, 47), Size = UDim2.new(1, -24, 0, 5), BorderSizePixel = 0, Parent = r4 })
+    bind(track, "BackgroundColor3", "Panel")
+    corner(track, 3)
+    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track })
+    corner(fill, 3)
+    gradient(fill, "AccentGrad")
+    local frames, acc = 0, 0
+    connect(RunService.Heartbeat, function(dt)
+        frames = frames + 1; acc = acc + dt
+        if acc >= 0.5 then
+            local fps = math.floor(frames / acc + 0.5)
+            frames, acc = 0, 0
+            fpsL.Text = tostring(fps)
+            tween(fpsL, 0.3, { TextColor3 = fps >= 50 and Status.Success[1] or (fps >= 30 and Status.Warning[1] or Status.Error[1]) })
+            local ping = math.floor(readPing() + 0.5)
+            pingL.Text = tostring(ping)
+            tween(pingL, 0.3, { TextColor3 = ping < 100 and Status.Success[1] or (ping < 200 and Status.Warning[1] or Status.Error[1]) })
+            tween(fill, 0.4, { Size = UDim2.fromScale(math.clamp(#Players:GetPlayers() / math.max(Players.MaxPlayers, 1), 0, 1), 1) })
+        end
+    end)
+
+    -- 5 · detected executor + capability chips -------------------------
+    local r5 = row(44)
+    local rep = Compat.report()
+    lbl(r5, "EXECUTOR", 8, "Accent", Enum.Font.GothamBold, 12, 7, UDim2.new(1, -336, 0, 0), 10)
+    lbl(r5, tostring(o.Executor or rep.Executor or "Unknown"), 13, "Text", Enum.Font.GothamBold, 12, 19, UDim2.new(1, -336, 0, 0), 18)
+    local items = {}
+    for _, it in ipairs(o.Support or {}) do items[#items + 1] = it end
+    items[#items + 1] = { "Clipboard", rep.Clipboard }
+    items[#items + 1] = { "Files", rep.Files }
+    items[#items + 1] = { "Http", rep.Http }
+    while #items > 4 do table.remove(items) end
+    local chips = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(316, 18), BackgroundTransparency = 1, Parent = r5 })
+    create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = chips })
+    for i, it in ipairs(items) do
+        local c = create("Frame", { Size = UDim2.fromOffset(76, 18), BorderSizePixel = 0, LayoutOrder = i, Parent = chips })
+        bind(c, "BackgroundColor3", "Panel")
+        corner(c, 9)
+        stroke(c, "Stroke", 1, 0.3)
+        local d = create("Frame", {
+            Position = UDim2.fromOffset(8, 5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Parent = c,
+            BackgroundColor3 = it[2] and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(230, 80, 80),
+        })
+        corner(d, 4)
+        local t = text(c, it[1], 9, "SubText", Enum.Font.GothamBold)
+        t.Position = UDim2.fromOffset(20, 0); t.Size = UDim2.new(1, -22, 1, 0)
+    end
+
+    return { Type = "Overview", SetVisible = function(_, b) for _, r in ipairs(rows) do r.Visible = b end end }
+end
+
 ----------------------------------------------------------------------
 -- Tab
 ----------------------------------------------------------------------
