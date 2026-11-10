@@ -19,7 +19,17 @@
       • Config: delete, auto-load, Color3 support
       • Window:Close() (animated), Nebula:SetDepth(0..1.5)
 
-    Everything from 1.3.0 still works. Usage: see example.lua
+    NEW in 2.1
+      • BlockInput: camera / game input is sunk while the pointer is over the UI
+        (no more dragging the screen / zooming when you touch the menu)
+      • Windows and the orb are clamped on-screen while dragging
+      • Backdrop blur is removed while the window is minimized ( - button )
+      • Notify icons + floating orb use random anime-girl images from the web
+        (override with Nebula.Icons.Notify / Nebula.Icons.Orb = id | url | {list})
+      • Window background image: Background = { Image = id|url|"anime", Transparency = 0..1 }
+        Window:SetBackground(img, transparency) / Window:SetBackgroundTransparency(t)
+
+    Usage: see example.lua
 ]]
 
 local Players          = game:GetService("Players")
@@ -29,15 +39,20 @@ local RunService       = game:GetService("RunService")
 local CoreGui          = game:GetService("CoreGui")
 local HttpService      = game:GetService("HttpService")
 local Lighting         = game:GetService("Lighting")
+local ContextActionService = game:GetService("ContextActionService")
 
 local LocalPlayer = Players.LocalPlayer
 
 local Nebula = {
-    Version      = "2.0.0",
+    Version      = "2.1.0",
     Depth        = 1,        -- 3D intensity (0 = flat, 1 = default, 1.5 = max)
     Parallax     = true,     -- window follows cursor with depth
     BlurEnabled  = true,     -- backdrop blur while a window is open
     SoundEnabled = true,
+    BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
+    AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
+    Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
+    ImageFolder  = "NebulaUI/img",
     SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
     Flags        = {},
     Options      = {},
@@ -196,6 +211,138 @@ function Nebula:_blur(size)
     tween(self._blurFx, 0.45, { Size = size }, Enum.EasingStyle.Quad)
 end
 
+-- blur only while at least one window is open AND not minimized
+function Nebula:_syncBlur()
+    local on = false
+    for _, w in ipairs(self.Windows) do
+        if w.Visible and not w.Minimized then on = true; break end
+    end
+    self:_blur(on and 14 or 0)
+end
+
+-- input sink: while any lock is held, camera / game actions don't receive the input
+function Nebula:_lock(key, on)
+    self._locks = self._locks or {}
+    self._locks[key] = on and true or nil
+    local want = self.BlockInput and next(self._locks) ~= nil
+    if want and not self._sinking then
+        self._sinking = true
+        pcall(function()
+            ContextActionService:BindActionAtPriority("NebulaSink", function()
+                return Enum.ContextActionResult.Sink
+            end, false, Enum.ContextActionPriority.High.Value + 100,
+                Enum.UserInputType.Touch, Enum.UserInputType.MouseButton1,
+                Enum.UserInputType.MouseButton2, Enum.UserInputType.MouseWheel)
+        end)
+    elseif not want and self._sinking then
+        self._sinking = false
+        pcall(function() ContextActionService:UnbindAction("NebulaSink") end)
+    end
+end
+
+-- images from the web (executor needs writefile + getcustomasset) ---------
+local function httpGet(url)
+    local ok, res = pcall(function() return game:HttpGet(url) end)
+    if ok and type(res) == "string" and #res > 0 then return res end
+    local req = (syn and syn.request) or (http and http.request) or http_request or request
+    if req then
+        local ok2, r = pcall(req, { Url = url, Method = "GET" })
+        if ok2 and type(r) == "table" and type(r.Body) == "string" and #r.Body > 0 then return r.Body end
+    end
+end
+
+local imgCache, imgN = {}, 0
+function Nebula:_download(url)
+    if imgCache[url] then return imgCache[url] end
+    local toAsset = getcustomasset or getsynasset
+    if not (writefile and toAsset) then return nil end
+    local body = httpGet(url)
+    if not body then return nil end
+    pcall(function()
+        if makefolder then
+            local root = self.ImageFolder:match("^[^/]+")
+            if not isfolder(root) then makefolder(root) end
+            if not isfolder(self.ImageFolder) then makefolder(self.ImageFolder) end
+        end
+    end)
+    imgN = imgN + 1
+    local ext = (url:match("%.(%a+)$") or url:match("%.(%a+)%?") or "png"):lower()
+    local path = ("%s/img_%d_%d.%s"):format(self.ImageFolder, os.time(), imgN, ext)
+    if not pcall(writefile, path, body) then return nil end
+    local ok, asset = pcall(toAsset, path)
+    if ok and asset then imgCache[url] = asset; return asset end
+end
+
+local ANIME_APIS = {
+    { "https://api.waifu.pics/sfw/waifu", function(j) return j.url end },
+    { "https://nekos.best/api/v2/waifu", function(j) return j.results and j.results[1] and j.results[1].url end },
+}
+function Nebula:_randomAnime()
+    for _ = 1, 6 do
+        if self._unloaded then return nil end
+        local api = ANIME_APIS[math.random(#ANIME_APIS)]
+        local raw = httpGet(api[1])
+        if raw then
+            local ok, j = pcall(HttpService.JSONDecode, HttpService, raw)
+            local url = ok and type(j) == "table" and api[2](j)
+            if type(url) == "string" then
+                local l = url:lower()
+                if not l:find("%.gif") and not l:find("%.webp") then   -- Roblox can't show those
+                    local a = self:_download(url)
+                    if a then return a end
+                end
+            end
+        end
+    end
+end
+
+function Nebula:_warmPool(n)
+    if self._warming or not self.AnimeIcons then return end
+    self._warming = true
+    self._pool = self._pool or {}
+    task.spawn(function()
+        for _ = 1, n do
+            if self._unloaded then break end
+            local a = self:_randomAnime()
+            if a then
+                table.insert(self._pool, a)
+                local w = self._waiters or {}
+                self._waiters = {}
+                for _, cb in ipairs(w) do pcall(cb, self._pool[math.random(#self._pool)]) end
+            end
+        end
+        self._warming = false
+    end)
+end
+
+local function pickAnime(self, cb)
+    if self._pool and #self._pool > 0 then cb(self._pool[math.random(#self._pool)]); return end
+    self._waiters = self._waiters or {}
+    table.insert(self._waiters, cb)
+    self:_warmPool(4)
+end
+
+-- src: number / "123" / "rbxassetid://.." / "https://.." / {list} / nil|"anime" (random anime) / false (none)
+function Nebula:_image(src, cb)
+    if src == false then return end
+    if type(src) == "table" then src = src[math.random(#src)] end
+    if src == nil or src == true or src == "anime" then
+        if self.AnimeIcons then pickAnime(self, cb) end
+        return
+    end
+    if type(src) == "number" or (type(src) == "string" and src:match("^%d+$")) then
+        cb("rbxassetid://" .. src); return
+    end
+    if type(src) == "string" and src:match("^https?://") then
+        task.spawn(function()
+            local a = self:_download(src)
+            if a then cb(a) end
+        end)
+        return
+    end
+    cb(src)
+end
+
 function Nebula:SetDepth(v) self.Depth = math.clamp(tonumber(v) or 1, 0, 1.5) end
 
 -- tooltips
@@ -321,20 +468,39 @@ local function ripple(host, x, scaleObj, alpha)
     task.delay(0.6, function() r:Destroy() end)
 end
 
-local function makeDraggable(handle, target, getScale, onMove)
-    local dragging, dragStart, startPos = false, nil, nil
+-- keep: "window" (top bar always reachable) | "full" (fully on-screen) | nil
+local function makeDraggable(handle, target, getScale, onMove, keep)
+    local dragging, dragStart, startPos, startAbs = false, nil, nil, nil
+    local function stop()
+        if dragging then dragging = false; Nebula:_lock("drag", false) end
+    end
     handle.InputBegan:Connect(function(i)
         if isPress(i) then
-            dragging, dragStart, startPos = true, i.Position, target.Position
+            dragging, dragStart, startPos, startAbs = true, i.Position, target.Position, target.AbsolutePosition
+            Nebula:_lock("drag", true)
             i.Changed:Connect(function()
-                if i.UserInputState == Enum.UserInputState.End then dragging = false end
+                if i.UserInputState == Enum.UserInputState.End then stop() end
             end)
         end
     end)
+    connect(UserInputService.InputEnded, function(i) if isPress(i) then stop() end end)
     connect(UserInputService.InputChanged, function(i)
         if dragging and isMove(i) then
             local d = i.Position - dragStart
             local s = getScale and getScale() or 1
+            local par = target.Parent
+            if keep and par then
+                local vp, sz = par.AbsoluteSize, target.AbsoluteSize
+                local nx, ny = startAbs.X + d.X, startAbs.Y + d.Y
+                if keep == "full" then
+                    nx = math.clamp(nx, 0, math.max(vp.X - sz.X, 0))
+                    ny = math.clamp(ny, 0, math.max(vp.Y - sz.Y, 0))
+                else
+                    nx = math.clamp(nx, 80 - sz.X, vp.X - 80)
+                    ny = math.clamp(ny, 0, vp.Y - 44)
+                end
+                d = Vector2.new(nx - startAbs.X, ny - startAbs.Y)
+            end
             if onMove then onMove(d) end
             target.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + d.X / s,
@@ -393,6 +559,7 @@ function Nebula:_ensureGui()
         create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
     })
     self:_buildTip(g)
+    if self.AnimeIcons and (self.Icons.Notify == nil or self.Icons.Orb == nil) then self:_warmPool(4) end
     return g
 end
 
@@ -484,6 +651,31 @@ function Nebula:Notify(o)
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = st[2], TextTransparency = 1,
         TextColor3 = BLACK, TextSize = 18, Font = Enum.Font.GothamBlack, Parent = icon,
     })
+    -- anime picture inside the icon (status glyph moves to a small badge)
+    local hasPic = false
+    local pic = create("ImageLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(2, 2), Size = UDim2.new(1, -4, 1, -4),
+        ImageTransparency = 1, ScaleType = Enum.ScaleType.Crop, ZIndex = 2, Parent = icon,
+    })
+    corner(pic, 18)
+    local badge = create("Frame", {
+        AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 3, 1, 3), Size = UDim2.fromOffset(15, 15),
+        BackgroundColor3 = st[1], BorderSizePixel = 0, Visible = false, ZIndex = 4, Parent = icon,
+    })
+    corner(badge, 8)
+    create("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(14, 14, 16), Parent = badge })
+    create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = st[2], TextColor3 = BLACK,
+        TextSize = 10, Font = Enum.Font.GothamBlack, ZIndex = 5, Parent = badge,
+    })
+    self:_image(self.Icons.Notify, function(asset)
+        if not pic.Parent then return end
+        hasPic = true
+        pic.Image = asset
+        tween(pic, 0.35, { ImageTransparency = 0 })
+        tween(iconTxt, 0.2, { TextTransparency = 1 })
+        badge.Visible = true
+    end)
 
     local tag = create("TextLabel", {
         BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 7), Size = UDim2.new(1, -110, 0, 12),
@@ -534,7 +726,7 @@ function Nebula:Notify(o)
     tween(slide, 0.7, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Back)
     task.delay(0.2, function()
         tween(icon, 0.5, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
-        tween(iconTxt, 0.3, { TextTransparency = 0 })
+        if not hasPic then tween(iconTxt, 0.3, { TextTransparency = 0 }) end
     end)
     tween(bar, duration, { Size = UDim2.new(0, 0, 0, 3) }, Enum.EasingStyle.Linear)
     task.delay(duration, dismiss)
@@ -791,6 +983,9 @@ function Nebula:Unload()
     if self._blurFx then self._blurFx:Destroy(); self._blurFx = nil end
     self._tip = nil
     self._gui = nil
+    self._locks = {}
+    pcall(function() ContextActionService:UnbindAction("NebulaSink") end)
+    self._sinking = false
 end
 
 ----------------------------------------------------------------------
@@ -1835,6 +2030,10 @@ function Tab:AddSection(o)
         LayoutOrder = self._sectionCount, Parent = col,
     })
     bind(frame, "BackgroundColor3", "Panel")
+    if self.Window and self.Window._panels then
+        table.insert(self.Window._panels, { frame = frame, clear = o.NoHeader == true })
+        if self.Window._glass and not o.NoHeader then self.Window:_glass() end
+    end
     corner(frame, 10)
     local fst = stroke(frame, "Stroke", 1, 0.5)
     bevelGrad(fst)
@@ -1965,6 +2164,11 @@ function Nebula:CreateWindow(cfg)
     local Main = create("CanvasGroup", { Name = "Face", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 2, Parent = Root })
     bind(Main, "BackgroundColor3", "Bg")
     corner(Main, 12)
+    local bgImg = create("ImageLabel", {
+        Name = "Background", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 0,
+        ScaleType = Enum.ScaleType.Crop, ImageTransparency = 1, Visible = false, Parent = Main,
+    })
+    corner(bgImg, 12)
     local mainSheen = sheen(Main, 65, 150)
 
     -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
@@ -2067,7 +2271,7 @@ function Nebula:CreateWindow(cfg)
     closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = WHITE }); cx.TextColor3 = Color3.new(0, 0, 0) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = resolve("Element") }); cx.TextColor3 = resolve("SubText") end)
 
-    makeDraggable(top, Root, function() return scale.Scale end)
+    makeDraggable(top, Root, function() return scale.Scale end, nil, "window")
     -- window "lifts" off the surface while dragging, drops back with a bounce
     local lifted = false
     top.InputBegan:Connect(function(i)
@@ -2255,11 +2459,26 @@ function Nebula:CreateWindow(cfg)
     fxl.Size = UDim2.new(1, 0, 0, 12); fxl.LayoutOrder = order + 1
     miniToggle("3D parallax", order + 2, function() return Nebula.Parallax end, function(b) Nebula.Parallax = b end)
     miniToggle("Backdrop blur", order + 3, function() return Nebula.BlurEnabled end, function(b)
-        Nebula.BlurEnabled = b; Nebula:_blur(Window.Visible and 14 or 0)
+        Nebula.BlurEnabled = b; Nebula:_syncBlur()
     end)
     miniToggle("Sound cues", order + 4, function() return Nebula.SoundEnabled end, function(b) Nebula.SoundEnabled = b end)
+    miniToggle("Block camera drag", order + 5, function() return Nebula.BlockInput end, function(b)
+        Nebula.BlockInput = b; Nebula:_lock("refresh", false)
+    end)
+    local bgl = text(panel, "BACKGROUND IMAGE", 10, "SubText", Enum.Font.GothamBold)
+    bgl.Size = UDim2.new(1, 0, 0, 12); bgl.LayoutOrder = order + 6
+    local bgRow = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = order + 7, ZIndex = 31, Parent = panel })
+    Window._bgLabel = create("TextLabel", { BackgroundTransparency = 1, Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -64, 1, 0), Text = "", TextSize = 12, Font = Enum.Font.GothamBold, ZIndex = 32, Parent = bgRow })
+    bind(Window._bgLabel, "TextColor3", "Text")
+    for _, d in ipairs({ { "-", 0, 0.1 }, { "+", 1, -0.1 } }) do
+        local b = create("TextButton", { AnchorPoint = Vector2.new(d[2], 0), Position = UDim2.new(d[2], 0, 0, 0), Size = UDim2.fromOffset(26, 26), BorderSizePixel = 0, Text = d[1], TextSize = 14, Font = Enum.Font.GothamBold, ZIndex = 32, Parent = bgRow })
+        bind(b, "BackgroundColor3", "Element"); bind(b, "TextColor3", "Text")
+        corner(b, 7)
+        b.MouseButton1Click:Connect(function() Window:SetBackgroundTransparency(Window._bgAlpha + d[3]) end)
+    end
+    Window._bgLabel.Text = "60%"
     local credit = text(panel, (cfg.Brand or "Nebula UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.Gotham)
-    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = order + 6; credit.TextXAlignment = Enum.TextXAlignment.Center
+    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = order + 8; credit.TextXAlignment = Enum.TextXAlignment.Center
 
     local pscale = create("UIScale", { Scale = 1, Parent = panel })
     local panelOpen, ptok = false, 0
@@ -2310,7 +2529,7 @@ function Nebula:CreateWindow(cfg)
         tween(Root, 0.8, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Back)
         tween(introV, 0.9, { Value = 1 }, Enum.EasingStyle.Back)
         tween(glow, 0.8, { Thickness = 2 })
-        Nebula:_blur(14)
+        Nebula:_syncBlur()
         Nebula:_sfx("Open")
         -- staggered pop-in of top bar / tabs / sections
         for i, p in ipairs(popItems) do
@@ -2335,6 +2554,7 @@ function Nebula:CreateWindow(cfg)
     end
 
     local function outro()
+        Nebula:_lock("hover" .. tostring(Window), false)
         tok = tok + 1
         local my = tok
         restPos = Root.Position
@@ -2347,7 +2567,7 @@ function Nebula:CreateWindow(cfg)
         }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         tween(introV, 0.32, { Value = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         tween(glow, 0.3, { Thickness = 0.5 })
-        Nebula:_blur(0)
+        Nebula:_syncBlur()
         Nebula:_sfx("Close")
         task.delay(0.42, function()
             if my ~= tok then return end
@@ -2367,6 +2587,7 @@ function Nebula:CreateWindow(cfg)
 
     function Window:Minimize()
         Window.Minimized = not Window.Minimized
+        Nebula:_syncBlur()   -- minimized = no blur, restored = blur again
         setPanel(false)
         Nebula:_sfx("Click")
         grip.Visible = not Window.Minimized
@@ -2404,10 +2625,43 @@ function Nebula:CreateWindow(cfg)
         if Window._orb then Window._orb:Destroy() end
         Root:Destroy()
         for i = #Nebula.Windows, 1, -1 do if Nebula.Windows[i] == Window then table.remove(Nebula.Windows, i) end end
-        if #Nebula.Windows == 0 then Nebula:_blur(0) end
+        Nebula:_lock("hover" .. tostring(Window), false)
+        Nebula:_lock("press" .. tostring(Window), false)
+        Nebula:_syncBlur()
     end
     function Window:SetTitle(s, sub) title.Text = s or title.Text; if sub then subtitle.Text = "●  " .. sub end end
     function Window:Notify(o) Nebula:Notify(o) end
+
+    -- background image (id / url / "anime"); transparency 0 = solid image, 1 = invisible
+    Window._bgAlpha = 0.6
+    Window._panels = {}
+    function Window:_glass()
+        local on = bgImg.Visible
+        for _, p in ipairs(Window._panels) do
+            if p.frame.Parent then p.frame.BackgroundTransparency = p.clear and 1 or (on and 0.35 or 0) end
+        end
+        side.BackgroundTransparency = on and 0.25 or 0
+        top.BackgroundTransparency  = on and 0.25 or 0
+    end
+    function Window:SetBackgroundTransparency(t)
+        Window._bgAlpha = math.clamp(tonumber(t) or 0.6, 0, 1)
+        if bgImg.Visible then tween(bgImg, 0.25, { ImageTransparency = Window._bgAlpha }) end
+        if Window._bgLabel then Window._bgLabel.Text = math.floor((1 - Window._bgAlpha) * 100 + 0.5) .. "%" end
+    end
+    function Window:SetBackground(src, transparency)
+        if transparency ~= nil then Window:SetBackgroundTransparency(transparency) end
+        if not src then
+            bgImg.Visible = false; bgImg.Image = ""; Window:_glass(); return
+        end
+        Nebula:_image(src, function(asset)
+            if not bgImg.Parent then return end
+            bgImg.Image = asset
+            bgImg.Visible = true
+            bgImg.ImageTransparency = 1
+            Window:_glass()
+            tween(bgImg, 0.5, { ImageTransparency = Window._bgAlpha })
+        end)
+    end
 
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
     closeBtn.MouseButton1Click:Connect(function() Window:Close() end)
@@ -2425,11 +2679,22 @@ function Nebula:CreateWindow(cfg)
         })
         corner(orb, 22)
         gradient(orb, "BtnGrad").Rotation = 90
-        create("TextLabel", {
+        local letter = create("TextLabel", {
             BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 51,
             Text = (cfg.Title or "N"):sub(1, 1):upper(), TextColor3 = WHITE, TextSize = 20,
             Font = Enum.Font.GothamBlack, Parent = orb,
         })
+        local orbPic = create("ImageLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 51, ImageTransparency = 1,
+            ScaleType = Enum.ScaleType.Crop, Parent = orb,
+        })
+        corner(orbPic, 22)
+        Nebula:_image(cfg.ToggleIcon ~= nil and cfg.ToggleIcon or Nebula.Icons.Orb, function(asset)
+            if not orbPic.Parent then return end
+            orbPic.Image = asset
+            tween(orbPic, 0.4, { ImageTransparency = 0 })
+            tween(letter, 0.3, { TextTransparency = 1 })
+        end)
         local os_ = create("UIStroke", { Thickness = 1.5, Color = WHITE, Parent = orb })
         local og = gradient(os_, "GlowGrad")
         animate(orb, function(t) og.Rotation = (t * 90) % 360 end)
@@ -2455,7 +2720,7 @@ function Nebula:CreateWindow(cfg)
         orb.MouseButton1Down:Connect(function() tween(osc, 0.1, { Scale = 0.9 }) end)
         orb.MouseButton1Up:Connect(function() tween(osc, 0.3, { Scale = 1.12 }, Enum.EasingStyle.Back) end)
         local moved = 0
-        makeDraggable(orb, orb, nil, function(d) moved = math.max(moved, math.abs(d.X) + math.abs(d.Y)) end)
+        makeDraggable(orb, orb, nil, function(d) moved = math.max(moved, math.abs(d.X) + math.abs(d.Y)) end, "full")
         orb.InputBegan:Connect(function(i) if isPress(i) then moved = 0 end end)
         local spinT = 0
         orb.MouseButton1Click:Connect(function()
@@ -2636,6 +2901,34 @@ function Nebula:CreateWindow(cfg)
             Nebula:SetAutoLoad(nil); autoLbl:Set("Auto-load: off")
         end })
         return tab
+    end
+
+    -- block camera / game input while the pointer is over this window
+    local hoverKey, pressKey = "hover" .. tostring(Window), "press" .. tostring(Window)
+    local function inside(pos)
+        local p, sz = Root.AbsolutePosition, Root.AbsoluteSize
+        return Window.Visible and pos.X >= p.X and pos.X <= p.X + sz.X and pos.Y >= p.Y and pos.Y <= p.Y + sz.Y
+    end
+    local hovering = false
+    animate(Root, function()
+        local h = inside(UserInputService:GetMouseLocation())
+        if h ~= hovering then hovering = h; Nebula:_lock(hoverKey, h) end
+    end)
+    connect(UserInputService.InputBegan, function(i)
+        if isPress(i) and inside(Vector2.new(i.Position.X, i.Position.Y)) then Nebula:_lock(pressKey, true) end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if isPress(i) then Nebula:_lock(pressKey, false) end
+    end)
+
+    if cfg.Background then
+        local bg = cfg.Background
+        if type(bg) == "table" and bg.Image == nil and bg[1] == nil then bg = { Image = "anime" } end
+        if type(bg) == "table" and bg.Image ~= nil then
+            Window:SetBackground(bg.Image, bg.Transparency)
+        else
+            Window:SetBackground(bg)
+        end
     end
 
     -- entrance: same 3D choreography as re-opening the window
