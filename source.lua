@@ -1,22 +1,25 @@
 --[[
     ╔══════════════════════════════════════════════════╗
-    ║  Nebula UI Library  ·  v1.3.0  ·  MONOCHROME      ║
-    ║  Pure black & white · comet glow border · glass   ║
+    ║  Nebula UI Library  ·  v2.0.0  ·  3D MONOCHROME   ║
+    ║  Layered depth · parallax · 3D keycaps · glass    ║
     ╚══════════════════════════════════════════════════╝
 
-    Features
-      • Draggable window, minimize, close, toggle key + floating orb (mobile)
-      • Sidebar tabs with search, locked tabs, 2-column pages
-      • Collapsible sections
-      • Toggle (pill switch), Slider, Dropdown (single/multi/search), Input,
-        Button (shine + comet border), Keybind, Label, Paragraph, Divider
-      • Notifications (Success / Error / Warning / Info) with progress bar
-      • Built-in Settings panel (monochrome themes + UI scale)
-      • Config save / load (writefile) + ready-made Config tab
-      • Splash / loading screen
+    NEW in 2.0 (3D edition)
+      • Window = real depth stack: slab layers + soft shadows + mouse parallax
+        + specular light that follows the cursor
+      • Full open / close choreography: rise + tilt + scale (Back easing),
+        staggered top-bar / tab / section pop-in, backdrop blur, sound cues
+      • Drag = window "lifts" off the surface, drop = bounce back
+      • 3D keycap buttons (extruded base, press-down, cursor parallax label)
+      • Rows lift toward the viewer on hover and tilt their lighting
+      • Tab pages slide in/out in depth with cascading section pop-in
+      • Resizable window (3D grip), animated settings panel
+      • Tooltips on every element (Tooltip = "text")
+      • New elements: ColorPicker, Progress, Segment
+      • Config: delete, auto-load, Color3 support
+      • Window:Close() (animated), Nebula:SetDepth(0..1.5)
 
-    Themes: Obsidian (default) | Eclipse (OLED black) | Graphite
-    Usage: see example.lua
+    Everything from 1.3.0 still works. Usage: see example.lua
 ]]
 
 local Players          = game:GetService("Players")
@@ -25,11 +28,17 @@ local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 local CoreGui          = game:GetService("CoreGui")
 local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
 
 local Nebula = {
-    Version      = "1.3.0",
+    Version      = "2.0.0",
+    Depth        = 1,        -- 3D intensity (0 = flat, 1 = default, 1.5 = max)
+    Parallax     = true,     -- window follows cursor with depth
+    BlurEnabled  = true,     -- backdrop blur while a window is open
+    SoundEnabled = true,
+    SoundIds     = { Click = "rbxassetid://6895079853" },  -- swap for your own ids
     Flags        = {},
     Options      = {},
     Windows      = {},
@@ -141,6 +150,69 @@ local function connect(signal, fn)
     local c = signal:Connect(fn)
     table.insert(Nebula._conns, c)
     return c
+end
+
+
+local BLACK = Color3.new(0, 0, 0)
+local SHADOW_IMG = "rbxassetid://6014261993"
+
+-- soft drop shadow (9-slice). parent must NOT use a layout.
+local function softShadow(parent, o)
+    o = o or {}
+    return create("ImageLabel", {
+        Name = "Shadow", BackgroundTransparency = 1, Image = SHADOW_IMG, ImageColor3 = BLACK,
+        ImageTransparency = o.transparency or 0.5, ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49, 49, 450, 450), AnchorPoint = Vector2.new(.5, .5),
+        Position = UDim2.new(.5, 0, .5, o.offset or 6),
+        Size = UDim2.new(1, o.spread or 30, 1, o.spread or 30), ZIndex = o.z or 0, Parent = parent,
+    })
+end
+
+-- light-on-top / dark-on-bottom edge (gives strokes a bevel)
+local function bevelGrad(st)
+    return create("UIGradient", { Color = ColorSequence.new(WHITE, Color3.fromRGB(105, 105, 110)), Rotation = 90, Parent = st })
+end
+
+-- sound cues
+function Nebula:_sfx(kind)
+    if not self.SoundEnabled or not self._gui then return end
+    local id = self.SoundIds[kind] or self.SoundIds.Click
+    if not id then return end
+    local speed = ({ Click = 1, Toggle = 1.25, Open = 0.85, Close = 0.7, Notify = 1.5 })[kind] or 1
+    local snd = create("Sound", { SoundId = id, Volume = 0.25, PlaybackSpeed = speed, Parent = self._gui })
+    pcall(function() snd:Play() end)
+    task.delay(2.5, function() snd:Destroy() end)
+end
+
+-- backdrop blur
+function Nebula:_blur(size)
+    if not self.BlurEnabled then size = 0 end
+    if not self._blurFx or not self._blurFx.Parent then
+        local b = Instance.new("BlurEffect")
+        b.Name = "NebulaBlur"; b.Size = 0
+        pcall(function() b.Parent = Lighting end)
+        self._blurFx = b
+    end
+    tween(self._blurFx, 0.45, { Size = size }, Enum.EasingStyle.Quad)
+end
+
+function Nebula:SetDepth(v) self.Depth = math.clamp(tonumber(v) or 1, 0, 1.5) end
+
+-- tooltips
+local function addTip(inst, str)
+    if not str or str == "" then return end
+    inst.MouseEnter:Connect(function() Nebula:_showTip(str) end)
+    inst.MouseLeave:Connect(function() Nebula:_hideTip() end)
+    inst.MouseMoved:Connect(function(x, y) Nebula:_moveTip(x, y) end)
+end
+
+-- row "press into the screen" feedback (rows register their UIScale here)
+local ROWPOP = setmetatable({}, { __mode = "k" })
+local function pressDepth(hit, row)
+    local pp = ROWPOP[row]
+    if not pp then return end
+    hit.MouseButton1Down:Connect(function() tween(pp, 0.08, { Scale = 0.982 }) end)
+    hit.MouseButton1Up:Connect(function() tween(pp, 0.4, { Scale = 1.01 }, Enum.EasingStyle.Back) end)
 end
 
 -- Central animator: ONE Heartbeat connection drives every looping effect.
@@ -320,12 +392,66 @@ function Nebula:_ensureGui()
     }, {
         create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
     })
+    self:_buildTip(g)
     return g
+end
+
+function Nebula:_buildTip(g)
+    local tip = create("CanvasGroup", {
+        Name = "Tooltip", AutomaticSize = Enum.AutomaticSize.XY, Size = UDim2.fromOffset(0, 0),
+        BackgroundColor3 = Color3.fromRGB(14, 14, 16), BorderSizePixel = 0, GroupTransparency = 1,
+        Visible = false, ZIndex = 180, Parent = g,
+    })
+    create("UICorner", { CornerRadius = UDim.new(0, 7), Parent = tip })
+    create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(90, 90, 98), Transparency = 0.3, Parent = tip })
+    create("UIPadding", { PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5), PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9), Parent = tip })
+    local lbl = create("TextLabel", {
+        BackgroundTransparency = 1, AutomaticSize = Enum.AutomaticSize.XY, Size = UDim2.fromOffset(0, 0),
+        Text = "", TextSize = 11, Font = Enum.Font.GothamMedium, TextColor3 = Color3.fromRGB(235, 235, 240),
+        TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 181, Parent = tip,
+    })
+    create("UISizeConstraint", { MaxSize = Vector2.new(230, math.huge), Parent = lbl })
+    local sc = create("UIScale", { Scale = 0.9, Parent = tip })
+    self._tip = { frame = tip, label = lbl, scale = sc, tok = 0 }
+end
+
+function Nebula:_showTip(str)
+    local t = self._tip
+    if not t then return end
+    t.tok = t.tok + 1
+    local my = t.tok
+    t.label.Text = str
+    task.delay(0.35, function()
+        if my ~= t.tok then return end
+        t.frame.Visible = true
+        t.scale.Scale = 0.9
+        tween(t.frame, 0.18, { GroupTransparency = 0 })
+        tween(t.scale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
+    end)
+end
+
+function Nebula:_hideTip()
+    local t = self._tip
+    if not t then return end
+    t.tok = t.tok + 1
+    local my = t.tok
+    tween(t.frame, 0.12, { GroupTransparency = 1 })
+    task.delay(0.13, function() if my == t.tok then t.frame.Visible = false end end)
+end
+
+function Nebula:_moveTip(x, y)
+    local t = self._tip
+    if not t then return end
+    local cam = workspace.CurrentCamera
+    local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+    local px = math.min(x + 14, vp.X - t.frame.AbsoluteSize.X - 8)
+    t.frame.Position = UDim2.fromOffset(px, y + 18)
 end
 
 function Nebula:Notify(o)
     o = o or {}
     self:_ensureGui()
+    self:_sfx("Notify")
     local st = Status[o.Type or "Info"] or Status.Info
     local duration = o.Duration or 4
     self._notifCount = (self._notifCount or 0) + 1
@@ -335,9 +461,15 @@ function Nebula:Notify(o)
         BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 68),
         LayoutOrder = self._notifCount, Parent = self._notifHolder,
     })
+    -- 3D: card lives on a "slide" layer with its own soft shadow, swings in with a tilt
+    local slide = create("Frame", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Position = UDim2.fromOffset(330, 0),
+        Rotation = 9, Parent = wrap,
+    })
+    softShadow(slide, { offset = 7, spread = 36, transparency = 0.35 })
     local card = create("Frame", {
-        Size = UDim2.new(1, 0, 1, 0), Position = UDim2.fromOffset(330, 0),
-        BackgroundColor3 = Color3.fromRGB(14, 14, 16), BorderSizePixel = 0, ClipsDescendants = true, Parent = wrap,
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(14, 14, 16),
+        BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 2, Parent = slide,
     })
     corner(card, 10)
     sheen(card, 20, 120)
@@ -387,16 +519,19 @@ function Nebula:Notify(o)
     })
     gradient(bar, "AccentGrad")
 
+    local cardScale = create("UIScale", { Parent = card })
+    card.MouseEnter:Connect(function() tween(cardScale, 0.25, { Scale = 1.035 }, Enum.EasingStyle.Back) end)
+    card.MouseLeave:Connect(function() tween(cardScale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back) end)
     local dead = false
     local function dismiss()
         if dead then return end
         dead = true
-        tween(card, 0.3, { Position = UDim2.fromOffset(330, 0) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(slide, 0.3, { Position = UDim2.fromOffset(330, 0), Rotation = -10 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         task.delay(0.32, function() spin:Disconnect(); wrap:Destroy() end)
     end
     close.MouseButton1Click:Connect(dismiss)
 
-    tween(card, 0.6, { Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Back)
+    tween(slide, 0.7, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Back)
     task.delay(0.2, function()
         tween(icon, 0.5, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
         tween(iconTxt, 0.3, { TextTransparency = 0 })
@@ -504,14 +639,23 @@ function Nebula:Splash(o)
     bind(pct, "TextColor3", "SubText")
 
     local t0 = os.clock()
+    local exiting = false
     local spin = RunService.Heartbeat:Connect(function()
         local t = os.clock() - t0
         rg.Rotation = (t * 200) % 360
         tg.Offset = Vector2.new(math.sin(t * 1.6) * 0.6, 0)
         bgG.Rotation = 45 + math.sin(t * 0.7) * 20
+        -- 3D orbits: tilted ellipses, depth = size + opacity + draw order
         for i, d in ipairs(dots) do
             local a = t * (2.4 - i * 0.4) + i * 2.1
-            d.Position = UDim2.new(.5, math.cos(a) * 71, .5, math.sin(a) * 71)
+            local tilt, phi = 0.5 + i * 0.45, i * 1.25
+            local ox, oy = math.cos(a) * 80, math.sin(a) * 80 * math.sin(tilt)
+            local z = math.sin(a) * math.cos(tilt)
+            d.Position = UDim2.new(.5, ox * math.cos(phi) - oy * math.sin(phi), .5, ox * math.sin(phi) + oy * math.cos(phi))
+            local sz = (i == 1 and 9 or 6) * (1 + z * 0.55)
+            d.Size = UDim2.fromOffset(sz, sz)
+            d.ZIndex = z > 0 and 203 or 199
+            if not exiting then d.BackgroundTransparency = math.clamp(0.4 - z * 0.4, 0, 0.9) end
         end
     end)
 
@@ -549,7 +693,8 @@ function Nebula:Splash(o)
     task.wait(0.3)
 
     pulse:Cancel()
-    tween(outer, 0.5, { Size = UDim2.fromOffset(260, 260) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    exiting = true
+    tween(outer, 0.55, { Size = UDim2.fromOffset(460, 460) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tween(root, 0.5, { BackgroundTransparency = 1 })
     for _, d in ipairs(root:GetDescendants()) do
         if d:IsA("TextLabel") then tween(d, 0.45, { TextTransparency = 1 })
@@ -581,6 +726,7 @@ function Nebula:SaveConfig(name)
     for flag, v in pairs(self.Flags) do
         local opt = self.Options[flag]
         if typeof(v) == "EnumItem" then data[flag] = { __enum = v.Name }
+        elseif typeof(v) == "Color3" then data[flag] = { __c3 = { v.R, v.G, v.B } }
         elseif type(v) ~= "userdata" and not (opt and opt.NoSave) then data[flag] = v end
     end
     pcall(function() if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end end)
@@ -597,11 +743,42 @@ function Nebula:LoadConfig(name)
     for flag, v in pairs(data) do
         local opt = self.Options[flag]
         if opt then
-            if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum] end
+            if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum] elseif type(v) == "table" and v.__c3 then v = Color3.new(v.__c3[1], v.__c3[2], v.__c3[3]) end
             pcall(function() opt:Set(v) end)
         end
     end
     return true
+end
+
+function Nebula:DeleteConfig(name)
+    if not (delfile and isfile) or not name then return false end
+    local path = self.ConfigFolder .. "/" .. name .. ".json"
+    if not isfile(path) then return false end
+    return (pcall(delfile, path))
+end
+
+function Nebula:SetAutoLoad(name)
+    if not writefile then return false end
+    local path = self.ConfigFolder .. "/autoload.txt"
+    pcall(function() if not isfolder(self.ConfigFolder) then makefolder(self.ConfigFolder) end end)
+    if name and name ~= "" then
+        return (pcall(writefile, path, name))
+    end
+    if isfile and delfile and isfile(path) then pcall(delfile, path) end
+    return true
+end
+
+function Nebula:GetAutoLoad()
+    local path = self.ConfigFolder .. "/autoload.txt"
+    if readfile and isfile and isfile(path) then
+        local ok, n = pcall(readfile, path)
+        if ok and n and n ~= "" then return n end
+    end
+end
+
+function Nebula:LoadAuto()
+    local n = self:GetAutoLoad()
+    return n and self:LoadConfig(n) or false
 end
 
 function Nebula:Unload()
@@ -611,6 +788,8 @@ function Nebula:Unload()
     for i = #ANIM, 1, -1 do ANIM[i] = nil end
     self._animConn = nil
     if self._gui then self._gui:Destroy() end
+    if self._blurFx then self._blurFx:Destroy(); self._blurFx = nil end
+    self._tip = nil
     self._gui = nil
 end
 
@@ -635,20 +814,31 @@ local function newRow(section, height)
     bind(row, "BackgroundColor3", "Element")
     row.ClipsDescendants = true
     corner(row, 8)
-    sheen(row, 90, 200)
+    local sh = sheen(row, 90, 200)
     local st = stroke(row, "Stroke", 1, 0.5)
+    bevelGrad(st)
+    local pop = create("UIScale", { Parent = row })
+    ROWPOP[row] = pop
     local pip = create("Frame", {
         AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, 0, (height > 0 and height or 34) / 2),
-        Size = UDim2.fromOffset(2, 0), BorderSizePixel = 0, ZIndex = 3, Parent = row,
+        Size = UDim2.fromOffset(2, 0), BorderSizePixel = 0, ZIndex = 3, LayoutOrder = -1, Parent = row,
     })
     bind(pip, "BackgroundColor3", "Accent")
     row.MouseEnter:Connect(function()
-        tween(st, 0.18, { Color = resolve("Accent"), Transparency = 0.35 })
+        tween(st, 0.18, { Color = resolve("Accent"), Transparency = 0.3 })
         tween(pip, 0.25, { Size = UDim2.fromOffset(2, 16) }, Enum.EasingStyle.Back)
+        tween(pop, 0.3, { Scale = 1.01 }, Enum.EasingStyle.Back)
+    end)
+    row.MouseMoved:Connect(function(x)
+        -- the light direction follows the cursor -> surface looks tilted toward it
+        local rel = math.clamp((x - row.AbsolutePosition.X) / math.max(row.AbsoluteSize.X, 1), 0, 1)
+        sh.Rotation = 90 + (rel - 0.5) * 70 * Nebula.Depth
     end)
     row.MouseLeave:Connect(function()
         tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.5 })
         tween(pip, 0.2, { Size = UDim2.fromOffset(2, 0) })
+        tween(pop, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
+        tween(sh, 0.35, { Rotation = 90 })
     end)
     return row
 end
@@ -707,12 +897,20 @@ function Section:AddDivider()
     bind(d, "BackgroundColor3", "Stroke")
 end
 
----------------------------------------------------------------- Button
+---------------------------------------------------------------- Button (3D keycap)
 function Section:AddButton(o)
     local obj = { Type = "Button" }
+    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Parent = self.Body })
+    -- extruded base (the "side" of the key)
+    local base = create("Frame", {
+        Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 34), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
+    })
+    bind(base, "BackgroundColor3", "Element")
+    corner(base, 8)
+    local baseGlow = stroke(base, "Stroke", 1, 0.35)
     local btn = create("TextButton", {
         Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0,
-        AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = self.Body,
+        AutoButtonColor = false, Text = "", ClipsDescendants = true, ZIndex = 2, Parent = wrap,
     })
     corner(btn, 8)
     gradient(btn, "BtnGrad").Rotation = 90
@@ -720,7 +918,8 @@ function Section:AddButton(o)
     local bs = create("UIScale", { Parent = btn })
     local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = btn })
     corner(shade, 8)
-    -- diagonal shine that sweeps across on hover
+    -- top specular edge (light hits the upper lip of the key)
+    local lip = create("Frame", { Position = UDim2.fromOffset(8, 1), Size = UDim2.new(1, -16, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 3, Parent = btn })
     local shine = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, -40, .5, 0), Size = UDim2.new(0, 24, 2.4, 0),
         Rotation = 20, BackgroundColor3 = WHITE, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 2, Parent = btn,
@@ -730,22 +929,39 @@ function Section:AddButton(o)
         TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 4, Parent = btn,
     })
     local sc = self.Tab.Window._scaleObj
+    local FACE = {
+        rest  = UDim2.fromOffset(0, 0),
+        hover = UDim2.fromOffset(0, -1),
+        press = UDim2.fromOffset(0, 3),
+    }
     btn.MouseEnter:Connect(function()
         bh.entry.on = true
+        tween(btn, 0.2, { Position = FACE.hover }, Enum.EasingStyle.Back)
         tween(shade, 0.2, { BackgroundTransparency = 0.94 })
         tween(bst, 0.2, { Transparency = 0 })
+        tween(baseGlow, 0.2, { Transparency = 0.1 })
         shine.Position = UDim2.new(0, -40, .5, 0)
         tween(shine, 0.7, { Position = UDim2.new(1, 40, .5, 0) }, Enum.EasingStyle.Quad)
     end)
+    btn.MouseMoved:Connect(function(x, y)
+        -- label drifts opposite to the cursor -> parallax inside the key
+        local rx = math.clamp((x - btn.AbsolutePosition.X) / math.max(btn.AbsoluteSize.X, 1), 0, 1)
+        local ry = math.clamp((y - btn.AbsolutePosition.Y) / math.max(btn.AbsoluteSize.Y, 1), 0, 1)
+        l.Position = UDim2.fromOffset(-(rx - 0.5) * 6 * Nebula.Depth, -(ry - 0.5) * 4 * Nebula.Depth)
+    end)
     btn.MouseLeave:Connect(function()
         bh.entry.on = false
+        tween(btn, 0.3, { Position = FACE.rest }, Enum.EasingStyle.Back)
         tween(bs, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
         tween(shade, 0.2, { BackgroundTransparency = 1 })
         tween(bst, 0.25, { Transparency = 0.6 })
+        tween(baseGlow, 0.25, { Transparency = 0.35 })
+        tween(l, 0.25, { Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Back)
     end)
     btn.MouseButton1Down:Connect(function(x)
+        tween(btn, 0.06, { Position = FACE.press }, Enum.EasingStyle.Quad)
         tween(shade, 0.08, { BackgroundTransparency = 0.8 })
-        tween(bs, 0.1, { Scale = 0.96 })
+        tween(bs, 0.1, { Scale = 0.975 })
         local s = sc and sc.Scale or 1
         local rx = (x - btn.AbsolutePosition.X) / s
         local d = (btn.AbsoluteSize.X / s) * 2.2
@@ -757,13 +973,18 @@ function Section:AddButton(o)
         tween(r, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
         task.delay(0.6, function() r:Destroy() end)
     end)
+    btn.MouseButton1Up:Connect(function()
+        tween(btn, 0.4, { Position = FACE.hover }, Enum.EasingStyle.Back)
+    end)
     btn.MouseButton1Click:Connect(function()
-        tween(bs, 0.35, { Scale = 1 }, Enum.EasingStyle.Back)
+        tween(bs, 0.4, { Scale = 1 }, Enum.EasingStyle.Back)
         tween(shade, 0.15, { BackgroundTransparency = 0.94 })
+        Nebula:_sfx("Click")
         if o.Callback then task.spawn(o.Callback) end
     end)
+    addTip(btn, o.Tooltip)
     function obj:SetText(s) l.Text = s end
-    function obj:SetVisible(b) btn.Visible = b end
+    function obj:SetVisible(b) wrap.Visible = b end
     return obj
 end
 
@@ -786,6 +1007,11 @@ function Section:AddToggle(o)
         Size = UDim2.fromOffset(14, 14), BorderSizePixel = 0, Parent = track,
     })
     corner(knob, 7)
+    -- sphere shading + specular dot
+    create("UIGradient", { Color = ColorSequence.new(WHITE, Color3.fromRGB(150, 150, 150)), Rotation = 90, Parent = knob })
+    stroke(knob, "Bg", 1, 0.3)
+    local spec = create("Frame", { Position = UDim2.fromOffset(3, 2), Size = UDim2.fromOffset(5, 3), BackgroundColor3 = WHITE, BackgroundTransparency = 0.5, BorderSizePixel = 0, Parent = knob })
+    corner(spec, 2)
     local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", Parent = row })
 
     local function render(animate)
@@ -809,7 +1035,8 @@ function Section:AddToggle(o)
     end
     function obj:Get() return obj.Value end
     function obj:SetVisible(b) row.Visible = b end
-    click.MouseButton1Click:Connect(function() obj:Set(not obj.Value) end)
+    click.MouseButton1Click:Connect(function() Nebula:_sfx("Toggle"); obj:Set(not obj.Value) end)
+    addTip(click, o.Tooltip); pressDepth(click, row)
     click.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
 
     register(obj, o); render(false)
@@ -840,6 +1067,7 @@ function Section:AddSlider(o)
         BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track,
     })
     corner(knob, 6)
+    create("UIGradient", { Color = ColorSequence.new(WHITE, Color3.fromRGB(165, 165, 165)), Rotation = 90, Parent = knob })
     stroke(knob, "Bg", 2, 0)
     local halo = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(0, 0),
@@ -870,6 +1098,7 @@ function Section:AddSlider(o)
     function obj:Get() return obj.Value end
     function obj:SetVisible(b) row.Visible = b end
 
+    addTip(hit, o.Tooltip)
     local dragging = false
     local function fromInput(pos)
         local a = math.clamp((pos.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
@@ -920,6 +1149,7 @@ function Section:AddInput(o)
     corner(box, 6)
     create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = box })
     local bs = stroke(box, "Stroke", 1, 0.5)
+    addTip(box, o.Tooltip)
     box.ClipsDescendants = true
     local ul = create("Frame", {
         AnchorPoint = Vector2.new(.5, 1), Position = UDim2.new(.5, 0, 1, 0), Size = UDim2.new(0, 0, 0, 2),
@@ -984,7 +1214,8 @@ function Section:AddKeybind(o)
     function obj:Get() return obj.Value end
     function obj:SetVisible(b) row.Visible = b end
 
-    btn.MouseButton1Click:Connect(function() obj.Listening = true; render() end)
+    addTip(btn, o.Tooltip); pressDepth(btn, row)
+    btn.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj.Listening = true; render() end)
     btn.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
     connect(UserInputService.InputBegan, function(i, gp)
         if obj.Listening then
@@ -1079,6 +1310,7 @@ function Section:AddDropdown(o)
     onTheme(paint)
 
     local function choose(k)
+        Nebula:_sfx("Click")
         if obj.Multi then obj.Value[k] = (not obj.Value[k]) or nil
         else obj.Value = k end
         paint(); changed(obj, o, false)
@@ -1118,6 +1350,21 @@ function Section:AddDropdown(o)
         end)
     end
 
+    local lastH
+    local function cascadeItems()
+        local n = 0
+        for _, k in ipairs(obj.Options) do
+            local it = items[k]
+            if it then
+                n = n + 1
+                it[2].TextTransparency = 1
+                it[2].Position = UDim2.fromOffset(-8, 0)
+                task.delay(0.03 * n, function()
+                    tween(it[2], 0.3, { TextTransparency = 0, Position = UDim2.fromOffset(8, 0) }, Enum.EasingStyle.Back)
+                end)
+            end
+        end
+    end
     local tok = 0
     function obj:Toggle(state)
         if state == nil then state = not obj.Open end
@@ -1132,6 +1379,8 @@ function Section:AddDropdown(o)
             local h = (search and 28 or 0) + scroll.Size.Y.Offset + 6
             wrap.AutomaticSize = Enum.AutomaticSize.None
             wrap.Size = UDim2.new(1, 0, 0, 0)
+            lastH = h
+            cascadeItems()
             wrap.Visible = true
             tween(wrap, 0.32, { Size = UDim2.new(1, 0, 0, h) }, Enum.EasingStyle.Quint).Completed:Connect(function()
                 if my == tok then
@@ -1142,7 +1391,7 @@ function Section:AddDropdown(o)
             end)
         else
             wrap.AutomaticSize = Enum.AutomaticSize.None
-            wrap.Size = UDim2.new(1, 0, 0, wrap.AbsoluteSize.Y / sc)
+            wrap.Size = UDim2.new(1, 0, 0, lastH or wrap.AbsoluteSize.Y / sc)
             tween(wrap, 0.25, { Size = UDim2.new(1, 0, 0, 0) }, Enum.EasingStyle.Quint).Completed:Connect(function()
                 if my == tok then
                     wrap.Visible = false
@@ -1167,11 +1416,229 @@ function Section:AddDropdown(o)
     function obj:SetOptions(list) obj.Options = list or {}; build() end
     function obj:SetVisible(b) root.Visible = b end
 
-    head.MouseButton1Click:Connect(function() obj:Toggle() end)
+    addTip(head, o.Tooltip); pressDepth(head, root)
+    head.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Toggle() end)
     head.ClipsDescendants = true
     corner(head, 8)
     head.MouseButton1Down:Connect(function(x) ripple(head, x, dsec.Tab.Window._scaleObj, 0.9) end)
     register(obj, o); build()
+    return obj
+end
+
+---------------------------------------------------------------- Progress
+function Section:AddProgress(o)
+    o = o or {}
+    local min, max = o.Min or 0, o.Max or 100
+    local obj = { Type = "Progress", Value = math.clamp(o.Default or min, min, max) }
+    local row = newRow(self, 44)
+    local l = text(row, o.Name or "Progress", 13)
+    l.Position = UDim2.fromOffset(10, 6); l.Size = UDim2.new(1, -90, 0, 16)
+    local v = text(row, "", 12, "SubText", Enum.Font.GothamBold)
+    v.AnchorPoint = Vector2.new(1, 0); v.Position = UDim2.new(1, -10, 0, 6)
+    v.Size = UDim2.fromOffset(80, 16); v.TextXAlignment = Enum.TextXAlignment.Right
+
+    local track = create("Frame", { Position = UDim2.new(0, 10, 0, 29), Size = UDim2.new(1, -20, 0, 8), BorderSizePixel = 0, Parent = row })
+    bind(track, "BackgroundColor3", "Panel")
+    corner(track, 4)
+    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ClipsDescendants = true, Parent = track })
+    corner(fill, 4)
+    gradient(fill, "AccentGrad")
+    -- moving gloss inside the filled part
+    local gloss = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(-.3, .5), Size = UDim2.new(0, 30, 3, 0),
+        Rotation = 20, BackgroundColor3 = WHITE, BackgroundTransparency = 0.65, BorderSizePixel = 0, Parent = fill,
+    })
+    animate(track, function(t) gloss.Position = UDim2.fromScale((t * 0.7) % 1.8 - 0.3, .5) end, gateOf(self))
+
+    local function render(anim)
+        local a = (obj.Value - min) / math.max(max - min, 1e-9)
+        tween(fill, anim and 0.5 or 0, { Size = UDim2.fromScale(a, 1) }, Enum.EasingStyle.Quint)
+        v.Text = (o.Percent == false) and (tostring(math.floor(obj.Value * 100 + 0.5) / 100) .. (o.Suffix or ""))
+            or (math.floor(a * 100 + 0.5) .. "%")
+    end
+    function obj:Set(x, silent)
+        x = tonumber(x); if not x then return end
+        obj.Value = math.clamp(x, min, max)
+        render(true); changed(obj, o, silent)
+    end
+    function obj:Get() return obj.Value end
+    function obj:SetVisible(b) row.Visible = b end
+    addTip(row, o.Tooltip)
+    register(obj, o); render(false)
+    return obj
+end
+
+---------------------------------------------------------------- Segment (sliding pill)
+function Section:AddSegment(o)
+    o = o or {}
+    local opts = o.Options or {}
+    local obj = { Type = "Segment", Value = o.Default or opts[1] }
+    local row = newRow(self, 62)
+    local l = text(row, o.Name or "Segment", 13)
+    l.Position = UDim2.fromOffset(10, 5); l.Size = UDim2.new(1, -20, 0, 16)
+
+    local bar = create("Frame", { Position = UDim2.fromOffset(10, 27), Size = UDim2.new(1, -20, 0, 28), BorderSizePixel = 0, Parent = row })
+    bind(bar, "BackgroundColor3", "Panel")
+    corner(bar, 8)
+    local n = math.max(#opts, 1)
+    local pill = create("Frame", { Position = UDim2.new(0, 2, 0, 2), Size = UDim2.new(1 / n, -4, 1, -4), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = bar })
+    corner(pill, 6)
+    gradient(pill, "AccentGrad").Rotation = 90
+
+    local btns = {}
+    for i, k in ipairs(opts) do
+        local b = create("TextButton", {
+            Position = UDim2.new((i - 1) / n, 0, 0, 0), Size = UDim2.new(1 / n, 0, 1, 0), BackgroundTransparency = 1,
+            Text = tostring(k), TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false, ZIndex = 3, Parent = bar,
+        })
+        btns[i] = { b, k }
+        b.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Set(k) end)
+        addTip(b, o.Tooltip)
+    end
+    local function render(anim)
+        local idx = 1
+        for i, e in ipairs(btns) do if e[2] == obj.Value then idx = i end end
+        tween(pill, anim and 0.45 or 0, { Position = UDim2.new((idx - 1) / n, 2, 0, 2) }, Enum.EasingStyle.Back)
+        if anim then
+            -- squash & stretch while travelling
+            pill.Size = UDim2.new(1 / n, 4, 1, -4)
+            tween(pill, 0.4, { Size = UDim2.new(1 / n, -4, 1, -4) }, Enum.EasingStyle.Back)
+        end
+        for i, e in ipairs(btns) do
+            tween(e[1], 0.25, { TextColor3 = i == idx and Color3.fromRGB(10, 10, 12) or resolve("SubText") })
+        end
+    end
+    onTheme(function() render(false) end)
+    function obj:Set(v, silent) obj.Value = v; render(true); changed(obj, o, silent) end
+    function obj:Get() return obj.Value end
+    function obj:SetVisible(b) row.Visible = b end
+    register(obj, o); render(false)
+    return obj
+end
+
+---------------------------------------------------------------- Color picker
+function Section:AddColorPicker(o)
+    o = o or {}
+    local def = o.Default or Color3.fromRGB(255, 255, 255)
+    local obj = { Type = "ColorPicker", Value = def, Open = false }
+    local h, s, v = def:ToHSV()
+
+    local root = newRow(self, 34)
+    root.AutomaticSize = Enum.AutomaticSize.Y
+    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = root })
+    local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = root })
+    local l = text(head, o.Name or "Color", 13)
+    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -120, 1, 0)
+    local hex = text(head, "", 11, "SubText", Enum.Font.Code)
+    hex.AnchorPoint = Vector2.new(1, 0); hex.Position = UDim2.new(1, -54, 0, 0)
+    hex.Size = UDim2.fromOffset(70, 34); hex.TextXAlignment = Enum.TextXAlignment.Right
+    local sw = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(34, 18), BackgroundColor3 = def, BorderSizePixel = 0, Parent = head })
+    corner(sw, 6)
+    stroke(sw, "Accent", 1, 0.5)
+    local swScale = create("UIScale", { Parent = sw })
+
+    local H = 112
+    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, LayoutOrder = 2, Parent = root })
+
+    local svBox = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 78), BackgroundColor3 = Color3.fromHSV(h, 1, 1), BorderSizePixel = 0, Parent = wrap })
+    corner(svBox, 6)
+    local white = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = svBox })
+    corner(white, 6)
+    create("UIGradient", { Transparency = NumberSequence.new(0, 1), Parent = white })
+    local black = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BorderSizePixel = 0, Parent = svBox })
+    corner(black, 6)
+    create("UIGradient", { Transparency = NumberSequence.new(1, 0), Rotation = 90, Parent = black })
+    local cur = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(10, 10), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 3, Parent = svBox })
+    corner(cur, 7)
+    create("UIStroke", { Thickness = 2, Color = WHITE, Parent = cur })
+
+    local hue = create("Frame", { Position = UDim2.fromOffset(10, 92), Size = UDim2.new(1, -20, 0, 12), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = wrap })
+    corner(hue, 6)
+    local kps = {}
+    for i = 0, 6 do kps[#kps + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i / 6, 1, 1)) end
+    create("UIGradient", { Color = ColorSequence.new(kps), Parent = hue })
+    local hknob = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(6, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 3, Parent = hue })
+    corner(hknob, 3)
+    stroke(hknob, "Bg", 1, 0)
+
+    local function refresh(silent)
+        local c = Color3.fromHSV(h, s, v)
+        obj.Value = c
+        svBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+        cur.Position = UDim2.fromScale(s, 1 - v)
+        hknob.Position = UDim2.fromScale(h, .5)
+        sw.BackgroundColor3 = c
+        hex.Text = "#" .. c:ToHex():upper()
+        changed(obj, o, silent)
+    end
+
+    local dragSV, dragH = false, false
+    local function svFrom(pos)
+        s = math.clamp((pos.X - svBox.AbsolutePosition.X) / math.max(svBox.AbsoluteSize.X, 1), 0, 1)
+        v = 1 - math.clamp((pos.Y - svBox.AbsolutePosition.Y) / math.max(svBox.AbsoluteSize.Y, 1), 0, 1)
+        refresh()
+    end
+    local function hFrom(pos)
+        h = math.clamp((pos.X - hue.AbsolutePosition.X) / math.max(hue.AbsoluteSize.X, 1), 0, 1)
+        refresh()
+    end
+    local svHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = svBox })
+    local hHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = hue })
+    svHit.InputBegan:Connect(function(i)
+        if isPress(i) then
+            dragSV = true; self.Tab.Page.ScrollingEnabled = false
+            tween(cur, 0.2, { Size = UDim2.fromOffset(16, 16) }, Enum.EasingStyle.Back)
+            svFrom(i.Position)
+        end
+    end)
+    hHit.InputBegan:Connect(function(i)
+        if isPress(i) then
+            dragH = true; self.Tab.Page.ScrollingEnabled = false
+            tween(hknob, 0.2, { Size = UDim2.fromOffset(8, 20) }, Enum.EasingStyle.Back)
+            hFrom(i.Position)
+        end
+    end)
+    connect(UserInputService.InputChanged, function(i)
+        if isMove(i) then
+            if dragSV then svFrom(i.Position) elseif dragH then hFrom(i.Position) end
+        end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if isPress(i) and (dragSV or dragH) then
+            dragSV, dragH = false, false
+            self.Tab.Page.ScrollingEnabled = true
+            tween(cur, 0.25, { Size = UDim2.fromOffset(10, 10) }, Enum.EasingStyle.Back)
+            tween(hknob, 0.25, { Size = UDim2.fromOffset(6, 16) }, Enum.EasingStyle.Back)
+        end
+    end)
+
+    function obj:Toggle(state)
+        if state == nil then state = not obj.Open end
+        obj.Open = state
+        tween(swScale, 0.35, { Scale = state and 1.18 or 1 }, Enum.EasingStyle.Back)
+        if state then
+            wrap.Visible = true
+            tween(wrap, 0.38, { Size = UDim2.new(1, 0, 0, H) }, Enum.EasingStyle.Quint)
+        else
+            tween(wrap, 0.28, { Size = UDim2.new(1, 0, 0, 0) }, Enum.EasingStyle.Quint).Completed:Connect(function()
+                if not obj.Open then wrap.Visible = false end
+            end)
+        end
+    end
+    function obj:Set(c, silent)
+        if typeof(c) ~= "Color3" then return end
+        h, s, v = c:ToHSV()
+        refresh(silent)
+    end
+    function obj:Get() return obj.Value end
+    function obj:SetVisible(b) root.Visible = b end
+
+    head.ClipsDescendants = true
+    corner(head, 8)
+    head.MouseButton1Down:Connect(function(x) ripple(head, x, self.Tab.Window._scaleObj, 0.9) end)
+    head.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); obj:Toggle() end)
+    addTip(head, o.Tooltip); pressDepth(head, root)
+    register(obj, o); refresh(true)
     return obj
 end
 
@@ -1332,6 +1799,22 @@ end
 local Tab = {}
 Tab.__index = Tab
 
+-- sections rise out of the page one after another (scale + Back easing)
+function Tab:_cascade(delay0)
+    self._ctok = (self._ctok or 0) + 1
+    local my = self._ctok
+    local list = self._secs or {}
+    for i, sc in ipairs(list) do
+        sc.Scale = 0.9
+        task.delay((delay0 or 0) + (i - 1) * 0.07, function()
+            if my == self._ctok then tween(sc, 0.6, { Scale = 1 }, Enum.EasingStyle.Back) end
+        end)
+    end
+    task.delay((delay0 or 0) + #list * 0.07 + 0.8, function()
+        if my == self._ctok then for _, sc in ipairs(list) do sc.Scale = 1 end end
+    end)
+end
+
 function Tab:AddSection(o)
     if type(o) == "string" then o = { Name = o } end
     o = o or {}
@@ -1354,7 +1837,11 @@ function Tab:AddSection(o)
     bind(frame, "BackgroundColor3", "Panel")
     corner(frame, 10)
     local fst = stroke(frame, "Stroke", 1, 0.5)
+    bevelGrad(fst)
     sheen(frame, 90, 185)
+    local fscale = create("UIScale", { Parent = frame })
+    self._secs = self._secs or {}
+    self._secs[#self._secs + 1] = fscale
     local pad = create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), Parent = frame })
     create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
     if o.NoHeader then
@@ -1462,13 +1949,59 @@ function Nebula:CreateWindow(cfg)
     local fs = cfg.Size or UDim2.fromOffset(600, 380)
     local TOP, SIDE = 42, 150
 
-    local Main = create("Frame", {
+    -- Root holds the whole 3D stack: shadows -> slabs -> face (Main)
+    local Root = create("Frame", {
         Name = "Window", AnchorPoint = Vector2.new(.5, .5), Position = cfg.Position or UDim2.fromScale(.5, .5),
-        Size = fs, BorderSizePixel = 0, ClipsDescendants = true, Parent = gui,
+        Size = fs, BackgroundTransparency = 1, Parent = gui,
     })
+    local shFar  = softShadow(Root, { offset = 16, spread = 76, transparency = 0.5, z = 0 })
+    local shNear = softShadow(Root, { offset = 5, spread = 28, transparency = 0.35, z = 0 })
+    local slab2 = create("Frame", { Position = UDim2.fromOffset(8, 13), Size = UDim2.new(1, -16, 1, 0), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
+    bind(slab2, "BackgroundColor3", "Panel")
+    corner(slab2, 12)
+    local slab = create("Frame", { Position = UDim2.fromOffset(0, 7), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
+    bind(slab, "BackgroundColor3", "Side")
+    corner(slab, 12)
+    local Main = create("CanvasGroup", { Name = "Face", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 2, Parent = Root })
     bind(Main, "BackgroundColor3", "Bg")
     corner(Main, 12)
-    sheen(Main, 65, 150)
+    local mainSheen = sheen(Main, 65, 150)
+
+    -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
+    local introV = create("NumberValue", { Value = 1, Parent = Root })
+    local liftV  = create("NumberValue", { Value = 0, Parent = Root })
+    local par = { x = 0, y = 0 }
+    local function applyDepth()
+        local k, f, lf = Nebula.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value
+        slab.Position  = UDim2.fromOffset(-par.x * 5 * k, (7 + lf) * k * f)
+        slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k, (13 + lf * 1.8) * k * f)
+        slab.BackgroundTransparency  = math.clamp(1 - f, 0, 1)
+        slab2.BackgroundTransparency = math.clamp(1 - f * 0.6, 0, 1)
+        shNear.Position = UDim2.new(.5, -par.x * 8 * k, .5, (5 + lf * 0.6 - par.y * 4) * k)
+        shFar.Position  = UDim2.new(.5, -par.x * 18 * k, .5, (16 + lf - par.y * 6) * k)
+        shNear.ImageTransparency = math.clamp(1 - 0.65 * f * math.min(k, 1), 0, 1)
+        shFar.ImageTransparency  = math.clamp(1 - 0.5 * f * math.min(k, 1), 0, 1)
+    end
+    introV.Changed:Connect(applyDepth)
+    liftV.Changed:Connect(applyDepth)
+    applyDepth()
+
+    -- cursor parallax: layers slide against each other, specular light follows the mouse
+    local ptx, pty = 0, 0
+    animate(Root, function()
+        if Nebula.Parallax then
+            local m = UserInputService:GetMouseLocation()
+            local c = Root.AbsolutePosition + Root.AbsoluteSize / 2
+            ptx = math.clamp((m.X - c.X) / math.max(Root.AbsoluteSize.X, 1), -1, 1)
+            pty = math.clamp((m.Y - c.Y) / math.max(Root.AbsoluteSize.Y, 1), -1, 1)
+        else
+            ptx, pty = 0, 0
+        end
+        par.x = par.x + (ptx - par.x) * 0.28
+        par.y = par.y + (pty - par.y) * 0.28
+        mainSheen.Rotation = 65 + par.x * 24 * Nebula.Depth
+        applyDepth()
+    end, vgate)
 
     -- auto-fit to small screens
     local base = 1
@@ -1477,7 +2010,7 @@ function Nebula:CreateWindow(cfg)
         local vp = cam.ViewportSize
         base = math.clamp(math.min(vp.X / (fs.X.Offset + 40), vp.Y / (fs.Y.Offset + 40)), 0.5, 1)
     end
-    local scale = create("UIScale", { Scale = base, Parent = Main })
+    local scale = create("UIScale", { Scale = base, Parent = Root })
     Window._scale = base
     Window._scaleObj = scale
 
@@ -1534,10 +2067,25 @@ function Nebula:CreateWindow(cfg)
     closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = WHITE }); cx.TextColor3 = Color3.new(0, 0, 0) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = resolve("Element") }); cx.TextColor3 = resolve("SubText") end)
 
-    makeDraggable(top, Main, function() return scale.Scale end)
-    -- window "lifts" (border thickens) while dragging
-    top.InputBegan:Connect(function(i) if isPress(i) then tween(glow, 0.2, { Thickness = 3.4 }) end end)
-    connect(UserInputService.InputEnded, function(i) if isPress(i) then tween(glow, 0.35, { Thickness = 2 }) end end)
+    makeDraggable(top, Root, function() return scale.Scale end)
+    -- window "lifts" off the surface while dragging, drops back with a bounce
+    local lifted = false
+    top.InputBegan:Connect(function(i)
+        if isPress(i) then
+            lifted = true
+            tween(glow, 0.2, { Thickness = 3.4 })
+            tween(liftV, 0.25, { Value = 12 }, Enum.EasingStyle.Quint)
+            tween(scale, 0.25, { Scale = Window._scale * 1.02 }, Enum.EasingStyle.Quint)
+        end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if lifted and isPress(i) then
+            lifted = false
+            tween(glow, 0.35, { Thickness = 2 })
+            tween(liftV, 0.55, { Value = 0 }, Enum.EasingStyle.Bounce)
+            tween(scale, 0.45, { Scale = Window._scale }, Enum.EasingStyle.Back)
+        end
+    end)
 
     -- shimmering line under the topbar
     local line = create("Frame", { Position = UDim2.new(0, 0, 1, -2), Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = top })
@@ -1545,7 +2093,7 @@ function Nebula:CreateWindow(cfg)
     animate(line, function(t) lineG.Offset = Vector2.new(math.sin(t * 1.1) * 0.7, 0) end, vgate)
 
     ------------------------------------------------ body
-    local Body = create("Frame", { Position = UDim2.fromOffset(0, TOP), Size = UDim2.new(1, 0, 1, -TOP), BackgroundTransparency = 1, Parent = Main })
+    local Body = create("CanvasGroup", { Position = UDim2.fromOffset(0, TOP), Size = UDim2.new(1, 0, 1, -TOP), BackgroundTransparency = 1, Parent = Main })
 
     local side = create("Frame", { Size = UDim2.new(0, SIDE, 1, 0), BorderSizePixel = 0, Parent = Body })
     bind(side, "BackgroundColor3", "Side")
@@ -1579,6 +2127,47 @@ function Nebula:CreateWindow(cfg)
 
     local content = create("Frame", { Position = UDim2.fromOffset(SIDE, 0), Size = UDim2.new(1, -SIDE, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, Parent = Body })
 
+    -- 3D resize grip
+    local grip = create("TextButton", {
+        AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -3, 1, -3), Size = UDim2.fromOffset(18, 18),
+        BackgroundTransparency = 1, Text = "◢", TextSize = 14, Font = Enum.Font.GothamBold, ZIndex = 40, Parent = Main,
+    })
+    bind(grip, "TextColor3", "SubText")
+    local gripScale = create("UIScale", { Parent = grip })
+    grip.MouseEnter:Connect(function()
+        tween(grip, 0.2, { TextColor3 = resolve("Accent") })
+        tween(gripScale, 0.25, { Scale = 1.3 }, Enum.EasingStyle.Back)
+    end)
+    grip.MouseLeave:Connect(function()
+        tween(grip, 0.2, { TextColor3 = resolve("SubText") })
+        tween(gripScale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
+    end)
+    local rz
+    grip.InputBegan:Connect(function(i)
+        if isPress(i) and not Window.Minimized then
+            rz = { p = i.Position, w = fs.X.Offset, h = fs.Y.Offset, pos = Root.Position }
+            tween(liftV, 0.2, { Value = 8 })
+        end
+    end)
+    connect(UserInputService.InputChanged, function(i)
+        if rz and isMove(i) then
+            local sc = scale.Scale
+            local d = i.Position - rz.p
+            local nw = math.clamp(rz.w + d.X / sc, 420, 1100)
+            local nh = math.clamp(rz.h + d.Y / sc, 270, 760)
+            fs = UDim2.fromOffset(nw, nh)
+            Root.Size = fs
+            -- keep the top-left corner pinned (Root is centre-anchored)
+            Root.Position = UDim2.new(rz.pos.X.Scale, rz.pos.X.Offset + (nw - rz.w) / 2, rz.pos.Y.Scale, rz.pos.Y.Offset + (nh - rz.h) / 2)
+        end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if rz and isPress(i) then
+            rz = nil
+            tween(liftV, 0.45, { Value = 0 }, Enum.EasingStyle.Bounce)
+        end
+    end)
+
     search:GetPropertyChangedSignal("Text"):Connect(function()
         local q = search.Text:lower()
         for _, t in ipairs(Window.Tabs) do
@@ -1587,7 +2176,7 @@ function Nebula:CreateWindow(cfg)
     end)
 
     ------------------------------------------------ settings panel
-    local panel = create("Frame", {
+    local panel = create("CanvasGroup", {
         AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, TOP + 6), Size = UDim2.fromOffset(210, 0),
         AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0, Visible = false, ZIndex = 30, Parent = Main,
     })
@@ -1642,48 +2231,186 @@ function Nebula:CreateWindow(cfg)
     scaleBtn("+", 1, 0).MouseButton1Click:Connect(function() setScale(Window._scale + 0.1) end)
     setScale(base)
 
+    local function miniToggle(label, lo, get, set)
+        local r = create("TextButton", { Size = UDim2.new(1, 0, 0, 24), BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = lo, ZIndex = 31, Parent = panel })
+        bind(r, "BackgroundColor3", "Element")
+        corner(r, 7)
+        local tl = text(r, label, 11, "Text"); tl.Position = UDim2.fromOffset(8, 0); tl.Size = UDim2.new(1, -50, 1, 0); tl.ZIndex = 32
+        local tr = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0), Size = UDim2.fromOffset(28, 14), BorderSizePixel = 0, ZIndex = 32, Parent = r })
+        corner(tr, 7)
+        local kn = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 2, .5, 0), Size = UDim2.fromOffset(10, 10), BorderSizePixel = 0, ZIndex = 33, Parent = tr })
+        corner(kn, 5)
+        local function render()
+            local on = get()
+            tween(tr, 0.2, { BackgroundColor3 = on and WHITE or resolve("Panel") })
+            tween(kn, 0.35, {
+                Position = on and UDim2.new(1, -12, .5, 0) or UDim2.new(0, 2, .5, 0),
+                BackgroundColor3 = on and BLACK or resolve("SubText"),
+            }, Enum.EasingStyle.Back)
+        end
+        onTheme(render); render()
+        r.MouseButton1Click:Connect(function() set(not get()); render(); Nebula:_sfx("Toggle") end)
+    end
+    local fxl = text(panel, "EFFECTS", 10, "SubText", Enum.Font.GothamBold)
+    fxl.Size = UDim2.new(1, 0, 0, 12); fxl.LayoutOrder = order + 1
+    miniToggle("3D parallax", order + 2, function() return Nebula.Parallax end, function(b) Nebula.Parallax = b end)
+    miniToggle("Backdrop blur", order + 3, function() return Nebula.BlurEnabled end, function(b)
+        Nebula.BlurEnabled = b; Nebula:_blur(Window.Visible and 14 or 0)
+    end)
+    miniToggle("Sound cues", order + 4, function() return Nebula.SoundEnabled end, function(b) Nebula.SoundEnabled = b end)
     local credit = text(panel, (cfg.Brand or "Nebula UI") .. "  ·  v" .. self.Version, 10, "SubText", Enum.Font.Gotham)
-    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = order + 1; credit.TextXAlignment = Enum.TextXAlignment.Center
+    credit.Size = UDim2.new(1, 0, 0, 12); credit.LayoutOrder = order + 6; credit.TextXAlignment = Enum.TextXAlignment.Center
 
-    setBtn.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible end)
+    local pscale = create("UIScale", { Scale = 1, Parent = panel })
+    local panelOpen, ptok = false, 0
+    local function setPanel(state)
+        if state == panelOpen then return end
+        panelOpen = state
+        ptok = ptok + 1
+        local my = ptok
+        if state then
+            panel.GroupTransparency = 1; pscale.Scale = 0.8; panel.Visible = true
+            tween(panel, 0.25, { GroupTransparency = 0 })
+            tween(pscale, 0.45, { Scale = 1 }, Enum.EasingStyle.Back)
+        else
+            tween(panel, 0.18, { GroupTransparency = 1 })
+            tween(pscale, 0.2, { Scale = 0.88 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            task.delay(0.2, function() if my == ptok then panel.Visible = false end end)
+        end
+        tween(setBtn, 0.4, { Rotation = state and 90 or 0 }, Enum.EasingStyle.Back)
+    end
+    setBtn.MouseButton1Click:Connect(function() Nebula:_sfx("Click"); setPanel(not panelOpen) end)
 
-    ------------------------------------------------ window methods
+    ------------------------------------------------ window methods (3D open / close)
+    local popItems = {}
+    for _, b in ipairs({ avatar, closeBtn, minBtn, setBtn }) do
+        popItems[#popItems + 1] = create("UIScale", { Parent = b })
+    end
+
+    local restPos
+    local tok = 0
+
+    local function intro()
+        tok = tok + 1
+        local my = tok
+        restPos = restPos or Root.Position
+        Root.Visible = true
+        -- start state: low, tilted, small, transparent, stack collapsed
+        Root.Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 60)
+        Root.Rotation = -9
+        scale.Scale = Window._scale * 0.78
+        Main.GroupTransparency = 1
+        introV.Value = 0
+        glow.Thickness = 0.5
+        for _, p in ipairs(popItems) do p.Scale = 0 end
+        title.TextTransparency = 1; subtitle.TextTransparency = 1
+        -- fly in
+        tween(Main, 0.45, { GroupTransparency = 0 }, Enum.EasingStyle.Quad)
+        tween(scale, 0.75, { Scale = Window._scale }, Enum.EasingStyle.Back)
+        tween(Root, 0.8, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Back)
+        tween(introV, 0.9, { Value = 1 }, Enum.EasingStyle.Back)
+        tween(glow, 0.8, { Thickness = 2 })
+        Nebula:_blur(14)
+        Nebula:_sfx("Open")
+        -- staggered pop-in of top bar / tabs / sections
+        for i, p in ipairs(popItems) do
+            task.delay(0.22 + i * 0.06, function() if my == tok then tween(p, 0.5, { Scale = 1 }, Enum.EasingStyle.Back) end end)
+        end
+        task.delay(0.3, function()
+            if my == tok then
+                tween(title, 0.4, { TextTransparency = 0 }); tween(subtitle, 0.5, { TextTransparency = 0 })
+            end
+        end)
+        task.spawn(function()
+            RunService.Heartbeat:Wait()
+            if my ~= tok then return end
+            for i, t in ipairs(Window.Tabs) do
+                t.Label.TextTransparency = 1
+                task.delay(0.3 + i * 0.06, function()
+                    if my == tok and t.Label.Parent then tween(t.Label, 0.4, { TextTransparency = 0 }) end
+                end)
+            end
+            if Window.ActiveTab then Window.ActiveTab:_cascade(0.3) end
+        end)
+    end
+
+    local function outro()
+        tok = tok + 1
+        local my = tok
+        restPos = Root.Position
+        setPanel(false)
+        tween(Main, 0.32, { GroupTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        tween(scale, 0.38, { Scale = Window._scale * 0.82 }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        tween(Root, 0.38, {
+            Rotation = 7,
+            Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 50),
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(introV, 0.32, { Value = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        tween(glow, 0.3, { Thickness = 0.5 })
+        Nebula:_blur(0)
+        Nebula:_sfx("Close")
+        task.delay(0.42, function()
+            if my ~= tok then return end
+            Root.Visible = false
+            Root.Rotation = 0
+            Root.Position = restPos
+            scale.Scale = Window._scale
+        end)
+    end
+
     function Window:Toggle(state)
         if state == nil then state = not Window.Visible end
+        if state == Window.Visible then return end
         Window.Visible = state
-        if state then
-            Main.Visible = true
-            scale.Scale = Window._scale * 0.94
-            tween(scale, 0.25, { Scale = Window._scale })
-        else
-            tween(scale, 0.18, { Scale = Window._scale * 0.94 })
-            task.delay(0.18, function()
-                if not Window.Visible then Main.Visible = false; scale.Scale = Window._scale end
-            end)
-        end
+        if state then intro() else outro() end
     end
 
     function Window:Minimize()
         Window.Minimized = not Window.Minimized
-        panel.Visible = false
+        setPanel(false)
+        Nebula:_sfx("Click")
+        grip.Visible = not Window.Minimized
+        tween(liftV, 0.2, { Value = 9 })
+        task.delay(0.25, function() tween(liftV, 0.5, { Value = 0 }, Enum.EasingStyle.Bounce) end)
         if Window.Minimized then
-            Body.Visible = false
-            tween(Main, 0.25, { Size = UDim2.new(fs.X.Scale, fs.X.Offset, 0, TOP) })
+            tween(Body, 0.2, { GroupTransparency = 1 })
+            task.delay(0.12, function()
+                if Window.Minimized then
+                    tween(Root, 0.45, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Back)
+                end
+            end)
+            task.delay(0.2, function() if Window.Minimized then Body.Visible = false end end)
         else
-            tween(Main, 0.25, { Size = fs })
-            task.delay(0.1, function() Body.Visible = true end)
+            Body.Visible = true
+            tween(Root, 0.5, { Size = fs }, Enum.EasingStyle.Back)
+            task.delay(0.2, function()
+                if not Window.Minimized then
+                    tween(Body, 0.35, { GroupTransparency = 0 })
+                    if Window.ActiveTab then Window.ActiveTab:_cascade(0) end
+                end
+            end)
         end
+    end
+
+    function Window:Close()
+        if Window._closing then return end
+        Window._closing = true
+        Window.Visible = false
+        outro()
+        task.delay(0.5, function() Window:Destroy() end)
     end
 
     function Window:Destroy()
         if Window._orb then Window._orb:Destroy() end
-        Main:Destroy()
+        Root:Destroy()
+        for i = #Nebula.Windows, 1, -1 do if Nebula.Windows[i] == Window then table.remove(Nebula.Windows, i) end end
+        if #Nebula.Windows == 0 then Nebula:_blur(0) end
     end
     function Window:SetTitle(s, sub) title.Text = s or title.Text; if sub then subtitle.Text = "●  " .. sub end end
     function Window:Notify(o) Nebula:Notify(o) end
 
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
-    closeBtn.MouseButton1Click:Connect(function() Window:Destroy() end)
+    closeBtn.MouseButton1Click:Connect(function() Window:Close() end)
 
     connect(UserInputService.InputBegan, function(i, gp)
         if not gp and i.KeyCode == (cfg.ToggleKey or Enum.KeyCode.RightShift) then Window:Toggle() end
@@ -1707,6 +2434,13 @@ function Nebula:CreateWindow(cfg)
         local og = gradient(os_, "GlowGrad")
         animate(orb, function(t) og.Rotation = (t * 90) % 360 end)
         local osc = create("UIScale", { Parent = orb })
+        -- glossy sphere highlight
+        local hl = create("Frame", {
+            Position = UDim2.fromOffset(9, 5), Size = UDim2.fromOffset(18, 9), BackgroundColor3 = WHITE,
+            BackgroundTransparency = 0.78, BorderSizePixel = 0, Rotation = -28, ZIndex = 52, Parent = orb,
+        })
+        corner(hl, 100)
+        animate(orb, function(t) hl.BackgroundTransparency = 0.78 + math.sin(t * 2) * 0.08 end)
         local pulse = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(44, 44),
             BackgroundTransparency = 1, Parent = orb,
@@ -1723,24 +2457,45 @@ function Nebula:CreateWindow(cfg)
         local moved = 0
         makeDraggable(orb, orb, nil, function(d) moved = math.max(moved, math.abs(d.X) + math.abs(d.Y)) end)
         orb.InputBegan:Connect(function(i) if isPress(i) then moved = 0 end end)
-        orb.MouseButton1Click:Connect(function() if moved < 8 then Window:Toggle() end end)
+        local spinT = 0
+        orb.MouseButton1Click:Connect(function()
+            if moved < 8 then
+                spinT = spinT + 360
+                tween(orb, 0.7, { Rotation = spinT }, Enum.EasingStyle.Back)
+                Window:Toggle()
+            end
+        end)
         Window._orb = orb
     end
 
     ------------------------------------------------ tabs
     function Window:SelectTab(tab)
         local prev = Window.ActiveTab
+        local dir = (prev and prev ~= tab and tab.Index < prev.Index) and -1 or 1
         for _, t in ipairs(Window.Tabs) do
             local on = t == tab
             tween(t.Label, 0.25, { TextColor3 = on and WHITE or resolve("SubText"), Position = UDim2.fromOffset(on and 18 or 14, 0) })
             t.Arrow.Visible = on
-            if not on then t.Group.Visible = false end
+            if not on and t ~= prev then t.Group.Visible = false end
         end
-        tab.Group.Visible = true
         if prev ~= tab then
+            Nebula:_sfx("Click")
+            if prev then
+                prev._tok = (prev._tok or 0) + 1
+                local my = prev._tok
+                tween(prev.Group, 0.22, { GroupTransparency = 1, Position = UDim2.fromOffset(-dir * 44, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                task.delay(0.24, function()
+                    if prev._tok == my and Window.ActiveTab ~= prev then prev.Group.Visible = false end
+                end)
+            end
+            tab._tok = (tab._tok or 0) + 1
+            tab.Group.Position = UDim2.fromOffset(dir * 44, 0)
             tab.Group.GroupTransparency = 1
-            tab.Group.Position = UDim2.fromOffset(0, 20)
-            tween(tab.Group, 0.4, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
+            tab.Group.Visible = true
+            tween(tab.Group, 0.5, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Quint)
+            tab:_cascade(0.05)
+        else
+            tab.Group.Visible = true
         end
         Window.ActiveTab = tab
         task.spawn(function()
@@ -1751,7 +2506,10 @@ function Nebula:CreateWindow(cfg)
                     indicator.Position = UDim2.fromOffset(6, y)
                     indicator.Visible = true
                 else
-                    tween(indicator, 0.45, { Position = UDim2.fromOffset(6, y) }, Enum.EasingStyle.Back)
+                    tween(indicator, 0.5, { Position = UDim2.fromOffset(6, y) }, Enum.EasingStyle.Back)
+                    -- stretch while travelling, then settle
+                    tween(indicator, 0.14, { Size = UDim2.new(1, -12, 0, 42) }, Enum.EasingStyle.Quad)
+                    task.delay(0.14, function() tween(indicator, 0.4, { Size = UDim2.new(1, -12, 0, 32) }, Enum.EasingStyle.Back) end)
                 end
             end
         end)
@@ -1760,7 +2518,7 @@ function Nebula:CreateWindow(cfg)
 
     function Window:AddTab(o)
         if type(o) == "string" then o = { Name = o } end
-        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window }, Tab)
+        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1 }, Tab)
 
         local b = create("TextButton", {
             Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
@@ -1854,14 +2612,35 @@ function Nebula:CreateWindow(cfg)
             end
         end })
         sec:AddButton({ Name = "Refresh list", Callback = function() list:SetOptions(Nebula:ListConfigs()) end })
+        sec:AddButton({ Name = "Delete", Callback = function()
+            if list.Value and Nebula:DeleteConfig(list.Value) then
+                Nebula:Notify({ Title = "Config deleted", Content = tostring(list.Value), Type = "Warning" })
+                list:Set(nil, true)
+                list:SetOptions(Nebula:ListConfigs())
+            else
+                Nebula:Notify({ Title = "Delete failed", Content = "Pick a saved config first.", Type = "Error" })
+            end
+        end })
+        local auto = Nebula:GetAutoLoad()
+        local autoLbl = sec:AddLabel(auto and ("Auto-load: " .. auto) or "Auto-load: off")
+        sec:AddButton({ Name = "Set as auto-load", Callback = function()
+            local n = list.Value
+            if n and Nebula:SetAutoLoad(n) then
+                autoLbl:Set("Auto-load: " .. tostring(n))
+                Nebula:Notify({ Title = "Auto-load", Content = tostring(n), Type = "Success" })
+            else
+                Nebula:Notify({ Title = "Auto-load failed", Content = "Pick a saved config first.", Type = "Warning" })
+            end
+        end })
+        sec:AddButton({ Name = "Clear auto-load", Callback = function()
+            Nebula:SetAutoLoad(nil); autoLbl:Set("Auto-load: off")
+        end })
         return tab
     end
 
-    -- entrance animation
-    glow.Transparency = 1
-    scale.Scale = base * 0.85
-    tween(glow, 0.8, { Transparency = 0 })
-    tween(scale, 0.65, { Scale = base }, Enum.EasingStyle.Back)
+    -- entrance: same 3D choreography as re-opening the window
+    Window.Root = Root
+    intro()
 
     return Window
 end
