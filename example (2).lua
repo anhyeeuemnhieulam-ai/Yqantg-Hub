@@ -47,7 +47,7 @@ Cards:AddStats()                                 -- live FPS / ping / server fil
 local Welcome = Info:AddSection({ Name = "About", Side = "Left" })
 Welcome:AddParagraph({
     Title   = "Welcome to " .. HUB_NAME,
-    Content = "Glow border, smooth animations, themes and config saving.",
+    Content = "Black & white comet border, glass panels, smooth animations and config saving.",
 })
 Welcome:AddButton({
     Name = "Copy link",
@@ -142,7 +142,7 @@ Window:AddConfigTab("Config")
 Nebula:Notify({ Title = HUB_NAME .. " loaded", Content = "Gear icon = themes & scale.", Type = "Success" })
 
 --[[ Handy API
-    Nebula:SetTheme("Aqua")          -- Nebula | Crimson | Aqua | Emerald | Mono
+    Nebula:SetTheme("Eclipse")        -- Obsidian | Eclipse | Graphite  (all black & white)
     Nebula:SaveConfig("name") / Nebula:LoadConfig("name")
     Nebula.Flags.SpeedValue          -- read any value by its Flag
     Nebula.Options.Mode:Set("Fast")  -- change a value from code
