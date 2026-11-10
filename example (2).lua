@@ -10,7 +10,7 @@ local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyee
 -- local Nebula = loadstring(readfile("Nebula/source.lua"))()
 
 local HUB_NAME = "Yqantg Hub"
-local HUB_LINK = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"
+local HUB_LINK = "https://github.com/anhyeeuemnhieulam-ai/Yqantg-Hub"
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -51,6 +51,7 @@ Welcome:AddParagraph({
 })
 Welcome:AddButton({
     Name = "Copy link",
+    Tooltip = "Copies the GitHub link to your clipboard",
     Callback = function()
         if setclipboard then setclipboard(HUB_LINK) end
         Nebula:Notify({ Title = "Copied", Content = "Link copied to clipboard.", Type = "Success" })
@@ -70,7 +71,7 @@ local Move = Window:AddTab("Movement")
 
 local Speed = Move:AddSection({ Name = "Speed", Side = "Left" })
 Speed:AddToggle({
-    Name = "Enable WalkSpeed", Flag = "SpeedEnabled", Default = false,
+    Name = "Enable WalkSpeed", Flag = "SpeedEnabled", Default = false, Tooltip = "Hover tooltips work on every element",
     Callback = function(on)
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum then hum.WalkSpeed = on and Nebula.Flags.SpeedValue or 16 end
@@ -124,6 +125,25 @@ local Inputs = Comp:AddSection({ Name = "Inputs", Side = "Right" })
 Inputs:AddInput({ Name = "Text input", Flag = "Text", Placeholder = "Type something...", Callback = function(s) print("Text:", s) end })
 Inputs:AddInput({ Name = "Number input", Flag = "Num", Default = "12", Numeric = true, Callback = function(n) print("Number:", n) end })
 
+-- NEW in 2.0 -----------------------------------------------------------
+local Fancy = Comp:AddSection({ Name = "3D extras", Side = "Left" })
+Fancy:AddColorPicker({
+    Name = "Accent color", Flag = "AccentColor", Default = Color3.fromRGB(255, 255, 255),
+    Tooltip = "Drag the square and the hue bar",
+    Callback = function(c) print("Color:", c) end,
+})
+Fancy:AddSegment({
+    Name = "Quality", Flag = "Quality", Options = { "Low", "Medium", "High" }, Default = "Medium",
+    Callback = function(v) print("Quality:", v) end,
+})
+local Bar = Fancy:AddProgress({ Name = "Download", Flag = "Download", Default = 35, NoSave = true })
+Fancy:AddButton({
+    Name = "Animate progress",
+    Callback = function()
+        for i = 0, 100, 5 do Bar:Set(i); task.wait(0.06) end
+    end,
+})
+
 local Misc = Comp:AddSection({ Name = "Collapsed section", Side = "Right", Collapsed = true })
 Misc:AddLabel("Click the header to expand / collapse.")
 Misc:AddDivider()
@@ -143,6 +163,12 @@ Nebula:Notify({ Title = HUB_NAME .. " loaded", Content = "Gear icon = themes & s
 
 --[[ Handy API
     Nebula:SetTheme("Eclipse")        -- Obsidian | Eclipse | Graphite  (all black & white)
+    Nebula:SetDepth(1.2)             -- 3D intensity 0..1.5  (0 = flat)
+    Nebula.Parallax = false          -- turn cursor parallax off
+    Nebula.BlurEnabled = false       -- no backdrop blur
+    Nebula.SoundEnabled = false      -- mute UI sounds
+    Nebula:LoadAuto()                -- load the config marked "auto-load"
+    Window:Close()                   -- animated close + destroy
     Nebula:SaveConfig("name") / Nebula:LoadConfig("name")
     Nebula.Flags.SpeedValue          -- read any value by its Flag
     Nebula.Options.Mode:Set("Fast")  -- change a value from code
