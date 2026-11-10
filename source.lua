@@ -1085,6 +1085,35 @@ function Yqantg:Notify(o)
     end
     close.MouseButton1Click:Connect(dismiss)
 
+    -- interactive buttons: Notify({ Buttons = { { Text = "Yes", Callback = fn }, { Text = "No" } } })
+    if type(o.Buttons) == "table" and #o.Buttons > 0 then
+        wrap.Size = UDim2.new(1, 0, 0, 98)
+        local btnHolder = create("Frame", {
+            Position = UDim2.fromOffset(56, 60), Size = UDim2.new(1, -66, 0, 24),
+            BackgroundTransparency = 1, Parent = card,
+        })
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder, Parent = btnHolder,
+        })
+        for idx, bInfo in ipairs(o.Buttons) do
+            local b = create("TextButton", {
+                Size = UDim2.new(0, 72, 1, 0), BackgroundColor3 = Color3.fromRGB(30, 30, 34),
+                Text = bInfo.Text or "Button", TextSize = 10, Font = Enum.Font.GothamBold,
+                TextColor3 = WHITE, AutoButtonColor = false, LayoutOrder = idx, Parent = btnHolder,
+            })
+            corner(b, 6)
+            create("UIStroke", { Thickness = 1, Color = Color3.fromRGB(90, 90, 98), Transparency = 0.3, Parent = b })
+            b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = Color3.fromRGB(52, 52, 58) }) end)
+            b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = Color3.fromRGB(30, 30, 34) }) end)
+            b.MouseButton1Click:Connect(function()
+                Yqantg:_sfx("Click")
+                if bInfo.Callback then task.spawn(bInfo.Callback) end
+                dismiss()
+            end)
+        end
+    end
+
     tween(slide, 0.7, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Back)
     task.delay(0.2, function()
         tween(icon, 0.5, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
@@ -1347,6 +1376,117 @@ function Yqantg:Unload()
     self._locks = {}
     pcall(function() ContextActionService:UnbindAction("YqantgSink") end)
     self._sinking = false
+end
+
+----------------------------------------------------------------------
+-- Memory cleaner (RAM / GC / leaks)
+--   Yqantg:Track(x)              Connection -> Disconnect, Instance -> Destroy, thread -> task.cancel,
+--                                table -> table.clear (cache), function -> cleaner.  Cleared on Yqantg:Clean().
+--   Yqantg:NewCache("k"|"v"|"kv") weak table that is also flushed on Clean()
+--   Yqantg:RegisterCleaner(name, fn)   your own flush logic (kept, runs every Clean)
+--   Yqantg:Clean(onStep, delay)  -> report { Freed(MB), Before, After, Conns, Objects, Tasks, Caches, Dead, GC }
+--   Yqantg.AutoClean / AutoCleanInterval
+----------------------------------------------------------------------
+Yqantg._temp = { conns = {}, objs = {}, tasks = {}, cleaners = {}, caches = setmetatable({}, { __mode = "v" }), cacheN = 0 }
+Yqantg.AutoClean = false
+Yqantg.AutoCleanInterval = 120
+
+function Yqantg:Track(item)
+    local T, t = self._temp, typeof(item)
+    if t == "RBXScriptConnection" then T.conns[#T.conns + 1] = item
+    elseif t == "Instance" then T.objs[#T.objs + 1] = item
+    elseif t == "thread" then T.tasks[#T.tasks + 1] = item
+    elseif t == "table" then T.cacheN = T.cacheN + 1; T.caches[T.cacheN] = item
+    elseif t == "function" then T.cleaners["fn" .. tostring(#T.cleaners + 1) .. tostring(item)] = item end
+    return item
+end
+
+function Yqantg:NewCache(mode)
+    local c = setmetatable({}, mode and { __mode = mode } or nil)
+    return self:Track(c)
+end
+
+function Yqantg:RegisterCleaner(name, fn)
+    if type(fn) == "function" then self._temp.cleaners[name or tostring(fn)] = fn end
+end
+
+function Yqantg:GetPending()
+    local T, n = self._temp, 0
+    n = #T.conns + #T.objs + #T.tasks
+    for _ in pairs(T.caches) do n = n + 1 end
+    for _ in pairs(T.cleaners) do n = n + 1 end
+    return n
+end
+
+function Yqantg:Clean(onStep, delay)
+    if self._cleaning then return nil end
+    self._cleaning = true
+    local T = self._temp
+    local rep = { Conns = 0, Objects = 0, Tasks = 0, Caches = 0, Dead = 0, GC = false }
+    local before = collectgarbage("count")
+
+    local steps = {
+        { "Disconnecting event handlers", function()
+            for i = #self._conns, 1, -1 do
+                local ok, alive = pcall(function() return self._conns[i].Connected end)
+                if ok and alive == false then table.remove(self._conns, i); rep.Dead = rep.Dead + 1 end
+            end
+            for i = 1, #T.conns do
+                pcall(function() T.conns[i]:Disconnect() end)
+                rep.Conns = rep.Conns + 1
+            end
+            table.clear(T.conns)
+        end },
+        { "Destroying temporary objects", function()
+            for i = 1, #T.objs do
+                pcall(function() T.objs[i]:Destroy() end)
+                rep.Objects = rep.Objects + 1
+            end
+            table.clear(T.objs)
+        end },
+        { "Cancelling background tasks", function()
+            for i = 1, #T.tasks do
+                pcall(task.cancel, T.tasks[i])
+                rep.Tasks = rep.Tasks + 1
+            end
+            table.clear(T.tasks)
+        end },
+        { "Flushing caches", function()
+            for _, c in pairs(T.caches) do
+                if type(c) == "table" then table.clear(c); rep.Caches = rep.Caches + 1 end
+            end
+            for _, fn in pairs(T.cleaners) do
+                if pcall(fn) then rep.Caches = rep.Caches + 1 end
+            end
+            for i = #ANIM, 1, -1 do
+                local e = ANIM[i]
+                if e.dead or (self._gui and not e.inst:IsDescendantOf(self._gui)) then table.remove(ANIM, i) end
+            end
+            for inst in pairs(ROWPOP) do
+                if not inst:IsDescendantOf(game) then ROWPOP[inst] = nil end
+            end
+        end },
+        { "Collecting garbage", function()
+            rep.GC = pcall(collectgarbage, "collect")
+            if rep.GC then task.wait(); pcall(collectgarbage, "collect") end
+        end },
+    }
+
+    pcall(function()
+        for i, st in ipairs(steps) do
+            if onStep then onStep(st[1], i, #steps) end
+            pcall(st[2])
+            if delay and delay > 0 then task.wait(delay) end
+        end
+    end)
+
+    local after = collectgarbage("count")
+    rep.Before, rep.After = before / 1024, after / 1024
+    rep.Freed = math.max(0, before - after) / 1024
+    rep.Time = os.clock()
+    self.LastClean = rep
+    self._cleaning = false
+    return rep
 end
 
 ----------------------------------------------------------------------
@@ -2074,22 +2214,24 @@ function Section:AddColorPicker(o)
     local def = o.Default or Color3.fromRGB(255, 255, 255)
     local obj = { Type = "ColorPicker", Value = def, Open = false }
     local h, s, v = def:ToHSV()
+    local alpha = math.clamp(o.AlphaDefault or o.Alpha or 1, 0, 1)
+    obj.Alpha = alpha
 
     local root = newRow(self, 34)
     root.AutomaticSize = Enum.AutomaticSize.Y
     create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = root })
     local head = create("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Text = "", LayoutOrder = 1, Parent = root })
     local l = text(head, o.Name or "Color", 13)
-    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -120, 1, 0)
+    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -176, 1, 0)
     local hex = text(head, "", 11, "SubText", Enum.Font.Code)
     hex.AnchorPoint = Vector2.new(1, 0); hex.Position = UDim2.new(1, -54, 0, 0)
-    hex.Size = UDim2.fromOffset(70, 34); hex.TextXAlignment = Enum.TextXAlignment.Right
+    hex.Size = UDim2.fromOffset(120, 34); hex.TextXAlignment = Enum.TextXAlignment.Right
     local sw = create("Frame", { AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(34, 18), BackgroundColor3 = def, BorderSizePixel = 0, Parent = head })
     corner(sw, 6)
     stroke(sw, "Accent", 1, 0.5)
     local swScale = create("UIScale", { Parent = sw })
 
-    local H = 112
+    local H = 134
     local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, LayoutOrder = 2, Parent = root })
 
     local svBox = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 78), BackgroundColor3 = Color3.fromHSV(h, 1, 1), BorderSizePixel = 0, Parent = wrap })
@@ -2113,18 +2255,30 @@ function Section:AddColorPicker(o)
     corner(hknob, 3)
     stroke(hknob, "Bg", 1, 0)
 
+    -- alpha (transparency) bar
+    local alphaBar = create("Frame", { Position = UDim2.fromOffset(10, 112), Size = UDim2.new(1, -20, 0, 12), BackgroundColor3 = def, BorderSizePixel = 0, Parent = wrap })
+    corner(alphaBar, 6)
+    create("UIGradient", { Transparency = NumberSequence.new(1, 0), Parent = alphaBar })
+    stroke(alphaBar, "Stroke", 1, 0.4)
+    local aKnob = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(6, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 3, Parent = alphaBar })
+    corner(aKnob, 3)
+    stroke(aKnob, "Bg", 1, 0)
+
     local function refresh(silent)
         local c = Color3.fromHSV(h, s, v)
-        obj.Value = c
+        obj.Value = c; obj.Alpha = alpha
         svBox.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
         cur.Position = UDim2.fromScale(s, 1 - v)
         hknob.Position = UDim2.fromScale(h, .5)
-        sw.BackgroundColor3 = c
-        hex.Text = "#" .. c:ToHex():upper()
-        changed(obj, o, silent)
+        sw.BackgroundColor3 = c; sw.BackgroundTransparency = 1 - alpha
+        alphaBar.BackgroundColor3 = c
+        aKnob.Position = UDim2.fromScale(alpha, .5)
+        hex.Text = "#" .. c:ToHex():upper() .. " (" .. math.floor(alpha * 100 + 0.5) .. "%)"
+        if obj._flag then Yqantg.Flags[obj._flag] = obj.Value end
+        if not silent and o.Callback then task.spawn(o.Callback, obj.Value, alpha) end
     end
 
-    local dragSV, dragH, cTrack = false, false, nil
+    local dragSV, dragH, dragA, cTrack = false, false, false, nil
     local function svFrom(pos)
         s = math.clamp((pos.X - svBox.AbsolutePosition.X) / math.max(svBox.AbsoluteSize.X, 1), 0, 1)
         v = 1 - math.clamp((pos.Y - svBox.AbsolutePosition.Y) / math.max(svBox.AbsoluteSize.Y, 1), 0, 1)
@@ -2134,30 +2288,43 @@ function Section:AddColorPicker(o)
         h = math.clamp((pos.X - hue.AbsolutePosition.X) / math.max(hue.AbsoluteSize.X, 1), 0, 1)
         refresh()
     end
+    local function aFrom(pos)
+        alpha = math.clamp((pos.X - alphaBar.AbsolutePosition.X) / math.max(alphaBar.AbsoluteSize.X, 1), 0, 1)
+        refresh()
+    end
     local svHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = svBox })
     local hHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = hue })
     svHit.InputBegan:Connect(function(i)
-        if isPress(i) and not (dragSV or dragH) then
+        if isPress(i) and not (dragSV or dragH or dragA) then
             dragSV = true; cTrack = i; self.Tab.Page.ScrollingEnabled = false
             tween(cur, 0.2, { Size = UDim2.fromOffset(16, 16) }, Enum.EasingStyle.Back)
             svFrom(i.Position)
         end
     end)
     hHit.InputBegan:Connect(function(i)
-        if isPress(i) and not (dragSV or dragH) then
+        if isPress(i) and not (dragSV or dragH or dragA) then
             dragH = true; cTrack = i; self.Tab.Page.ScrollingEnabled = false
             tween(hknob, 0.2, { Size = UDim2.fromOffset(8, 20) }, Enum.EasingStyle.Back)
             hFrom(i.Position)
         end
     end)
+    local aHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = alphaBar })
+    aHit.InputBegan:Connect(function(i)
+        if isPress(i) and not (dragSV or dragH or dragA) then
+            dragA = true; cTrack = i; self.Tab.Page.ScrollingEnabled = false
+            tween(aKnob, 0.2, { Size = UDim2.fromOffset(8, 20) }, Enum.EasingStyle.Back)
+            aFrom(i.Position)
+        end
+    end)
     connect(UserInputService.InputChanged, function(i)
-        if (dragSV or dragH) and ownsMove(cTrack, i) then
-            if dragSV then svFrom(i.Position) elseif dragH then hFrom(i.Position) end
+        if (dragSV or dragH or dragA) and ownsMove(cTrack, i) then
+            if dragSV then svFrom(i.Position) elseif dragH then hFrom(i.Position) else aFrom(i.Position) end
         end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if (dragSV or dragH) and ownsEnd(cTrack, i) then
-            dragSV, dragH = false, false
+        if (dragSV or dragH or dragA) and ownsEnd(cTrack, i) then
+            dragSV, dragH, dragA = false, false, false
+            tween(aKnob, 0.25, { Size = UDim2.fromOffset(6, 16) }, Enum.EasingStyle.Back)
             self.Tab.Page.ScrollingEnabled = true
             tween(cur, 0.25, { Size = UDim2.fromOffset(10, 10) }, Enum.EasingStyle.Back)
             tween(hknob, 0.25, { Size = UDim2.fromOffset(6, 16) }, Enum.EasingStyle.Back)
@@ -2177,12 +2344,14 @@ function Section:AddColorPicker(o)
             end)
         end
     end
-    function obj:Set(c, silent)
+    function obj:Set(c, silent, a)
         if typeof(c) ~= "Color3" then return end
         h, s, v = c:ToHSV()
+        if a then alpha = math.clamp(a, 0, 1) end
         refresh(silent)
     end
-    function obj:Get() return obj.Value end
+    function obj:Get() return obj.Value, alpha end
+    function obj:SetAlpha(a, silent) alpha = math.clamp(a, 0, 1); refresh(silent) end
     function obj:SetVisible(b) root.Visible = b end
 
     head.ClipsDescendants = true
@@ -2191,6 +2360,149 @@ function Section:AddColorPicker(o)
     head.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj:Toggle() end)
     addTip(head, o.Tooltip); pressDepth(head, root)
     register(obj, o); refresh(true)
+    return obj
+end
+
+---------------------------------------------------------------- Range slider (min / max)
+function Section:AddRangeSlider(o)
+    o = o or {}
+    local lo, hi, inc = o.Min or 0, o.Max or 100, o.Increment or 1
+    local span = math.max(hi - lo, 1e-9)
+    local suffix = o.Suffix or ""
+    local a = math.clamp(o.DefaultMin or lo, lo, hi)
+    local b = math.clamp(o.DefaultMax or hi, lo, hi)
+    local obj = { Type = "RangeSlider", Value = { Min = a, Max = b } }
+
+    local row = newRow(self, 46)
+    local l = text(row, o.Name or "Range", 13)
+    l.Position = UDim2.fromOffset(10, 6); l.Size = UDim2.new(1, -120, 0, 16)
+    local vl = text(row, "", 12, "SubText", Enum.Font.GothamBold)
+    vl.AnchorPoint = Vector2.new(1, 0); vl.Position = UDim2.new(1, -10, 0, 6)
+    vl.Size = UDim2.fromOffset(110, 16); vl.TextXAlignment = Enum.TextXAlignment.Right
+
+    local hit = create("TextButton", {
+        Position = UDim2.fromOffset(10, 24), Size = UDim2.new(1, -20, 0, 20),
+        BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = row,
+    })
+    local track = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.new(1, 0, 0, 6), BorderSizePixel = 0, Parent = hit })
+    bind(track, "BackgroundColor3", "Panel")
+    corner(track, 3)
+    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track })
+    corner(fill, 3)
+    gradient(fill, "AccentGrad")
+    local function knob()
+        local k = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(16, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 3, Parent = track })
+        corner(k, 8)
+        create("UIStroke", { Thickness = 2, Color = BLACK, Transparency = 0.55, Parent = k })
+        return k, create("UIScale", { Parent = k })
+    end
+    local k1, s1 = knob()
+    local k2, s2 = knob()
+
+    local function render()
+        local fa, fb = (a - lo) / span, (b - lo) / span
+        fill.Position = UDim2.fromScale(fa, 0); fill.Size = UDim2.fromScale(fb - fa, 1)
+        k1.Position = UDim2.fromScale(fa, .5); k2.Position = UDim2.fromScale(fb, .5)
+        vl.Text = a .. suffix .. "  -  " .. b .. suffix
+    end
+    local function commit(silent)
+        obj.Value = { Min = a, Max = b }
+        if obj._flag then Yqantg.Flags[obj._flag] = obj.Value end
+        render()
+        if not silent and o.Callback then task.spawn(o.Callback, a, b) end
+    end
+    local function snap(x)
+        local t = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+        return math.clamp(math.floor((lo + t * span) / inc + 0.5) * inc, lo, hi)
+    end
+
+    local tracked, which
+    local function move(x)
+        local val = snap(x)
+        if which == 1 then a = math.min(val, b) else b = math.max(val, a) end
+        commit()
+    end
+    local function release()
+        if not tracked then return end
+        tracked = nil
+        self.Tab.Page.ScrollingEnabled = true
+        tween(s1, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
+        tween(s2, 0.2, { Scale = 1 }, Enum.EasingStyle.Back)
+    end
+    hit.InputBegan:Connect(function(i)
+        if isPress(i) and not tracked then
+            tracked = i
+            local val = snap(i.Position.X)
+            -- grab the nearer handle (if both overlap, pick by side)
+            local da, db = math.abs(val - a), math.abs(val - b)
+            if da == db then which = (val <= a) and 1 or 2 else which = (da < db) and 1 or 2 end
+            self.Tab.Page.ScrollingEnabled = false
+            tween(which == 1 and s1 or s2, 0.15, { Scale = 1.25 }, Enum.EasingStyle.Back)
+            move(i.Position.X)
+        end
+    end)
+    connect(UserInputService.InputChanged, function(i) if tracked and ownsMove(tracked, i) then move(i.Position.X) end end)
+    connect(UserInputService.InputEnded, function(i) if tracked and ownsEnd(tracked, i) then release() end end)
+
+    function obj:Set(v, silent)
+        if type(v) ~= "table" then return end
+        local na = tonumber(v.Min or v[1]); local nb = tonumber(v.Max or v[2])
+        if not (na and nb) then return end
+        a = math.clamp(math.min(na, nb), lo, hi); b = math.clamp(math.max(na, nb), lo, hi)
+        commit(silent)
+    end
+    function obj:Get() return obj.Value end
+    function obj:SetVisible(x) row.Visible = x end
+    addTip(row, o.Tooltip)
+    register(obj, o); render()
+    return obj
+end
+
+---------------------------------------------------------------- Console / terminal log
+function Section:AddConsole(o)
+    o = o or {}
+    local obj = { Type = "Console", NoSave = true, _n = 0, _max = o.MaxLines or 200, _lines = {} }
+    local row = newRow(self, o.Height or 120)
+    local inset = create("Frame", {
+        Position = UDim2.fromOffset(6, 6), Size = UDim2.new(1, -12, 1, -12),
+        BackgroundColor3 = BLACK, BackgroundTransparency = 0.5, BorderSizePixel = 0, ClipsDescendants = true, Parent = row,
+    })
+    corner(inset, 6)
+    local scroll = create("ScrollingFrame", {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0,
+        ScrollBarThickness = 2, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(),
+        ScrollingDirection = Enum.ScrollingDirection.Y, Parent = inset,
+    })
+    create("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4), Parent = scroll })
+    create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+    local COLORS = {
+        Error = Color3.fromRGB(255, 90, 90), Success = Color3.fromRGB(90, 255, 130),
+        Warning = Color3.fromRGB(255, 200, 80), Info = Color3.fromRGB(220, 220, 228),
+    }
+    function obj:Log(msg, kind)
+        obj._n = obj._n + 1
+        local lbl = create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 14), AutomaticSize = Enum.AutomaticSize.Y,
+            Text = os.date("[%H:%M:%S] ") .. tostring(msg), TextColor3 = COLORS[kind or "Info"] or COLORS.Info,
+            TextSize = 11, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left,
+            TextWrapped = true, LayoutOrder = obj._n, Parent = scroll,
+        })
+        obj._lines[#obj._lines + 1] = lbl
+        if #obj._lines > obj._max then table.remove(obj._lines, 1):Destroy() end
+        task.defer(function()
+            scroll.CanvasPosition = Vector2.new(0, math.max(0, scroll.AbsoluteCanvasSize.Y - scroll.AbsoluteWindowSize.Y))
+        end)
+    end
+    function obj:Clear()
+        for _, lbl in ipairs(obj._lines) do lbl:Destroy() end
+        table.clear(obj._lines)
+    end
+    function obj:Get()
+        local t = {}
+        for i, lbl in ipairs(obj._lines) do t[i] = lbl.Text end
+        return t
+    end
+    function obj:SetVisible(x) row.Visible = x end
     return obj
 end
 
@@ -3420,10 +3732,176 @@ function Yqantg:CreateWindow(cfg)
     sliderRow(sndCard, "Volume", 0, 1.5, 0.05, function() return Yqantg.SoundVolume or 1 end, function(v) Yqantg.SoundVolume = v end, pct)
     toggleRow(sndCard, "Block camera drag", function() return Yqantg.BlockInput end, function(b) Yqantg.BlockInput = b; Yqantg:_lock("refresh", false) end)
 
+    -- MEMORY CLEANER
+    local memCard = card("MEMORY CLEANER")
+    local GREEN = Color3.fromRGB(80, 255, 130)
+    local acT = 0
+    local function fmtMB(x) return (x >= 10) and ("%.1f MB"):format(x) or ("%.2f MB"):format(x) end
+
+    local memLbl = text(memCard, "", 10, "Text", Enum.Font.Code)
+    memLbl.Size = UDim2.new(1, 0, 0, 14); memLbl.LayoutOrder = nextLO(memCard); memLbl.ZIndex = 33
+    local pendLbl = text(memCard, "", 10, "SubText", Enum.Font.Code)
+    pendLbl.Size = UDim2.new(1, 0, 0, 14); pendLbl.LayoutOrder = nextLO(memCard); pendLbl.ZIndex = 33
+    local function memText()
+        local lua = collectgarbage("count") / 1024
+        local ok, cl = pcall(function() return game:GetService("Stats"):GetTotalMemoryUsageMb() end)
+        memLbl.Text = (ok and tonumber(cl)) and ("Lua %s  ·  Client %.0f MB"):format(fmtMB(lua), cl) or ("Lua " .. fmtMB(lua))
+        local s = ("Queued: %d"):format(Yqantg:GetPending())
+        if Yqantg.AutoClean then s = s .. ("  ·  next auto in %ds"):format(math.max(0, math.ceil((Yqantg.AutoCleanInterval or 120) - acT))) end
+        pendLbl.Text = s
+    end
+    memText()
+    local memLast = 0
+    animate(memLbl, function(t) if t - memLast >= 1 then memLast = t; memText() end end, function() return panelOpen end)
+
+    -- big clean button: spinner -> checkmark
+    local cleanBtn = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+        ClipsDescendants = true, LayoutOrder = nextLO(memCard), ZIndex = 33, Parent = memCard,
+    })
+    corner(cleanBtn, 10)
+    gradient(cleanBtn, "BtnGrad").Rotation = 90
+    local _, _, cbh = glowStroke(cleanBtn, 1.2, 70, 0.4, { idle = true, gate = function() return panelOpen end })
+    local flash = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = GREEN, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 34, Parent = cleanBtn })
+    local slot = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 14, .5, 0), Size = UDim2.fromOffset(26, 26), BackgroundTransparency = 1, ZIndex = 35, Parent = cleanBtn })
+    local spin = create("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, GroupTransparency = 0.45, ZIndex = 35, Parent = slot })
+    for i = 1, 8 do
+        local ang = math.rad((i - 1) * 45)
+        local d = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5 + math.cos(ang) * .38, .5 + math.sin(ang) * .38),
+            Size = UDim2.fromOffset(4, 4), BackgroundColor3 = WHITE, BackgroundTransparency = (i - 1) / 8 * 0.85,
+            BorderSizePixel = 0, ZIndex = 36, Parent = spin,
+        })
+        corner(d, 2)
+    end
+    local chk = drawIcon(slot, "check", { size = 24, color = GREEN, z = 37, thick = 3 })
+    chk.GroupTransparency = 1
+    local chkScale = create("UIScale", { Scale = 0.2, Parent = chk })
+    local cbMain = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 7), Size = UDim2.new(1, -62, 0, 18), Text = "CLEAN MEMORY",
+        TextColor3 = WHITE, TextSize = 12, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 35, Parent = cleanBtn,
+    })
+    local cbSub = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 25), Size = UDim2.new(1, -62, 0, 14), Text = "Free RAM · disconnect leaks · flush caches",
+        TextColor3 = Color3.fromRGB(200, 200, 210), TextSize = 9, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 35, Parent = cleanBtn,
+    })
+    local prog = create("Frame", { Position = UDim2.new(0, 0, 1, -3), Size = UDim2.new(0, 0, 0, 3), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 36, Parent = cleanBtn })
+    gradient(prog, "AccentGrad")
+
+    local state, busy = "idle", false
+    animate(spin, function(t) spin.Rotation = (t * 420) % 360 end, function() return state == "busy" and panelOpen end)
+
+    local function runClean(auto)
+        if busy or Yqantg._cleaning then return end
+        busy = true; state = "busy"
+        local animated = panelOpen
+        cbMain.Text = auto and "AUTO CLEANING..." or "CLEANING..."
+        tween(spin, 0.2, { GroupTransparency = 0 })
+        prog.Size = UDim2.new(0, 0, 0, 3); prog.BackgroundTransparency = 0
+        local rep = Yqantg:Clean(function(label, i, n)
+            cbSub.Text = label .. "  (" .. i .. "/" .. n .. ")"
+            tween(prog, animated and 0.4 or 0.05, { Size = UDim2.new((i - 1) / n + 0.5 / n, 0, 0, 3) })
+        end, animated and 0.45 or 0)
+        if not rep then busy = false; state = "idle"; return end
+        -- done: spinner fades out while the check pops in
+        state = "done"
+        tween(prog, 0.25, { Size = UDim2.new(1, 0, 0, 3) })
+        tween(spin, 0.25, { GroupTransparency = 1 })
+        task.delay(0.12, function()
+            tween(chk, 0.3, { GroupTransparency = 0 })
+            tween(chkScale, 0.55, { Scale = 1 }, Enum.EasingStyle.Back)
+        end)
+        flash.BackgroundTransparency = 0.7
+        tween(flash, 0.9, { BackgroundTransparency = 1 })
+        cbMain.Text = "CLEANED"
+        cbSub.Text = ("Freed %s  ·  %d handlers  ·  %d objects  ·  %d tasks  ·  %d caches"):format(fmtMB(rep.Freed), rep.Conns + rep.Dead, rep.Objects, rep.Tasks, rep.Caches)
+        memText()
+        Yqantg:_sfx("Toggle")
+        if auto and rep.Freed >= 0.1 then
+            Yqantg:Notify({ Title = "Auto Clear", Content = "Freed " .. fmtMB(rep.Freed) .. " of Lua memory", Type = "Success", Duration = 2.5 })
+        end
+        task.wait(animated and 2.4 or 0.2)
+        tween(prog, 0.3, { BackgroundTransparency = 1 })
+        tween(chk, 0.3, { GroupTransparency = 1 })
+        tween(chkScale, 0.3, { Scale = 0.2 })
+        tween(spin, 0.3, { GroupTransparency = 0.45 })
+        cbMain.Text = "CLEAN MEMORY"
+        cbSub.Text = "Free RAM · disconnect leaks · flush caches"
+        state = "idle"; busy = false
+        memText()
+    end
+    cleanBtn.MouseEnter:Connect(function() cbh.entry.on = true end)
+    cleanBtn.MouseLeave:Connect(function() cbh.entry.on = false end)
+    cleanBtn.MouseButton1Down:Connect(function(x) ripple(cleanBtn, x, scale, 0.82) end)
+    cleanBtn.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); task.spawn(runClean, false) end)
+
+    toggleRow(memCard, "Auto Clear", function() return Yqantg.AutoClean end, function(b) Yqantg.AutoClean = b; acT = 0; memText() end)
+    sliderRow(memCard, "Auto Clear interval", 30, 600, 10, function() return Yqantg.AutoCleanInterval or 120 end,
+        function(v) Yqantg.AutoCleanInterval = v; acT = 0 end, function(v) return v .. "s" end, true)
+    connect(RunService.Heartbeat, function(dt)
+        if not Yqantg.AutoClean or busy then return end
+        acT = acT + dt
+        if acT >= (Yqantg.AutoCleanInterval or 120) then acT = 0; task.spawn(runClean, true) end
+    end)
+
+    -- info: what exactly gets cleaned
+    local INFO = {
+        { "RAM / Memory Footprint", "Lua heap (shown above) shrinks as unused allocations are released." },
+        { "Garbage Collection (GC)", 'collectgarbage("collect") runs twice to free unreachable data.' },
+        { "Allocation / Deallocation", 'collectgarbage("count") before vs after = the amount freed.' },
+        { "Memory Leak / Cyclic References", "Dropped references (nil assignment) let the GC free objects, including cycles." },
+        { "Event handlers cleanup", "Connection:Disconnect() / unbind on dead + tracked connections." },
+        { "Destroy()", "Tracked temporary Instances are destroyed." },
+        { "task.cancel()", "Tracked background threads are cancelled." },
+        { "Cache flushing / purging", "table.clear() on registered caches + library animator / row caches." },
+        { "Weak tables", '__mode = "k" / "v" / "kv" entries vanish on GC (Yqantg:NewCache(mode)).' },
+        { "Your script", "Yqantg:Track(conn | instance | thread | table)  ·  Yqantg:RegisterCleaner(name, fn)" },
+    }
+    local ITEM_H = 40
+    local infoHead = create("TextButton", {
+        Size = UDim2.new(1, 0, 0, 28), BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = nextLO(memCard), ZIndex = 33, Parent = memCard,
+    })
+    bind(infoHead, "BackgroundColor3", "Panel")
+    corner(infoHead, 8)
+    local ihl = text(infoHead, "What gets cleaned", 11, "Text", Enum.Font.GothamBold)
+    ihl.Position = UDim2.fromOffset(10, 0); ihl.Size = UDim2.new(1, -40, 1, 0); ihl.ZIndex = 34
+    local ihIcon = drawIcon(infoHead, "right", { size = 12, color = "SubText", z = 34, thick = 1.8, pos = UDim2.new(1, -16, .5, 0) })
+    local infoBody = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false,
+        LayoutOrder = nextLO(memCard), ZIndex = 33, Parent = memCard,
+    })
+    create("UIListLayout", { Padding = UDim.new(0, 0), SortOrder = Enum.SortOrder.LayoutOrder, Parent = infoBody })
+    for idx, it in ipairs(INFO) do
+        local r = create("Frame", { Size = UDim2.new(1, 0, 0, ITEM_H), BackgroundTransparency = 1, LayoutOrder = idx, ZIndex = 33, Parent = infoBody })
+        local dot = create("Frame", { Position = UDim2.fromOffset(2, 6), Size = UDim2.fromOffset(5, 5), BorderSizePixel = 0, ZIndex = 34, Parent = r })
+        bind(dot, "BackgroundColor3", "Accent")
+        corner(dot, 3)
+        local t1 = text(r, it[1], 11, "Text", Enum.Font.GothamBold)
+        t1.Position = UDim2.fromOffset(14, 0); t1.Size = UDim2.new(1, -14, 0, 14); t1.ZIndex = 34
+        local t2 = text(r, it[2], 9, "SubText", Enum.Font.Gotham)
+        t2.Position = UDim2.fromOffset(14, 15); t2.Size = UDim2.new(1, -14, 0, 24); t2.ZIndex = 34
+        t2.TextWrapped = true; t2.TextTruncate = Enum.TextTruncate.None; t2.TextYAlignment = Enum.TextYAlignment.Top
+    end
+    local infoOpen = false
+    infoHead.MouseButton1Click:Connect(function()
+        Yqantg:_sfx("Click")
+        infoOpen = not infoOpen
+        tween(ihIcon, 0.3, { Rotation = infoOpen and 90 or 0 }, Enum.EasingStyle.Back)
+        if infoOpen then
+            infoBody.Visible = true
+            tween(infoBody, 0.4, { Size = UDim2.new(1, 0, 0, #INFO * ITEM_H) })
+        else
+            tween(infoBody, 0.3, { Size = UDim2.new(1, 0, 0, 0) }).Completed:Connect(function()
+                if not infoOpen then infoBody.Visible = false end
+            end)
+        end
+    end)
+
     -- RESET + info
     local defaults = {
         theme = self.CurrentTheme, scale = base, depth = Yqantg.Depth, par = Yqantg.Parallax, blur = Yqantg.BlurEnabled,
-        snd = Yqantg.SoundEnabled, vol = Yqantg.SoundVolume or 1, block = Yqantg.BlockInput, tips = Yqantg.Tooltips ~= false, bg = 0.6,
+        snd = Yqantg.SoundEnabled, vol = Yqantg.SoundVolume or 1, block = Yqantg.BlockInput, tips = Yqantg.Tooltips ~= false, bg = 0.6, auto = false, autoInt = 120,
     }
     local function resetAll()
         Yqantg:SetTheme(defaults.theme)
@@ -3435,6 +3913,7 @@ function Yqantg:CreateWindow(cfg)
         Yqantg.SoundVolume = defaults.vol
         Yqantg.BlockInput = defaults.block; Yqantg:_lock("refresh", false)
         Yqantg.Tooltips = defaults.tips
+        Yqantg.AutoClean = defaults.auto; Yqantg.AutoCleanInterval = defaults.autoInt; acT = 0
         Window:SetBackgroundTransparency(defaults.bg)
         for _, f in ipairs(refreshers) do f() end
     end
