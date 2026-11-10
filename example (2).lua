@@ -7,8 +7,7 @@
 -- From GitHub (replace with your raw link):
 -- local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/source.lua"))()
 -- From a local file (executor workspace):
-local Nebula = loadstring(readfile("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
-
+local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
