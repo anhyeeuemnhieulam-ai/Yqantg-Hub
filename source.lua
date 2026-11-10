@@ -99,8 +99,8 @@ Nebula.Themes = {
 
 -- status colors are shades of white/gray (icons tell them apart)
 local Status = {
-    Success = { Color3.fromRGB(255, 255, 255), "✓", "SUCCESS" },
-    Error   = { Color3.fromRGB(226, 226, 231), "✕", "ERROR" },
+    Success = { Color3.fromRGB(255, 255, 255), "check", "SUCCESS" },
+    Error   = { Color3.fromRGB(226, 226, 231), "cross", "ERROR" },
     Warning = { Color3.fromRGB(190, 190, 197), "!", "WARNING" },
     Info    = { Color3.fromRGB(152, 152, 160), "i", "INFO" },
 }
@@ -423,6 +423,92 @@ local function isMove(i)
     return i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch
 end
 
+-- touch-only device (phone): GetMouseLocation() follows whichever finger moved last,
+-- so anything driven by it (parallax / hover) would jitter when a 2nd finger swipes elsewhere.
+local function touchOnly()
+    return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+end
+
+-- vector icons built from frames (no font glyphs -> never shows the "[]" missing-glyph box)
+-- kind: check | cross | down | right | grip | lock
+-- o.size = number | UDim2, o.color = Color3 | theme key, o.thick, o.pos, o.anchor, o.z
+local function paintTo(inst, prop, color)
+    if type(color) == "string" then bind(inst, prop, color) else inst[prop] = color end
+end
+
+local function drawIcon(parent, kind, o)
+    o = o or {}
+    local sz = o.size or 14
+    if type(sz) == "number" then sz = UDim2.fromOffset(sz, sz) end
+    local th, color, z = o.thick or 2, o.color or WHITE, o.z or 1
+    local root = create("CanvasGroup", {
+        Name = "Icon_" .. kind, BackgroundTransparency = 1, BorderSizePixel = 0,
+        AnchorPoint = o.anchor or Vector2.new(.5, .5), Position = o.pos or UDim2.fromScale(.5, .5),
+        Size = sz, ZIndex = z, Parent = parent,
+    })
+    local function bar(cx, cy, len, rot)
+        local b = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(cx, cy),
+            Size = UDim2.new(len, 0, 0, th), Rotation = rot, BorderSizePixel = 0, ZIndex = z, Parent = root,
+        })
+        create("UICorner", { CornerRadius = UDim.new(0, 2), Parent = b })
+        paintTo(b, "BackgroundColor3", color)
+    end
+    if kind == "check" then
+        bar(.29, .63, .31, 45); bar(.62, .51, .64, -46)
+    elseif kind == "cross" then
+        bar(.5, .5, .8, 45); bar(.5, .5, .8, -45)
+    elseif kind == "down" then
+        bar(.34, .52, .5, 45); bar(.66, .52, .5, -45)
+    elseif kind == "right" then
+        bar(.52, .34, .5, 45); bar(.52, .66, .5, -45)
+    elseif kind == "grip" then
+        bar(.78, .78, .16, -45); bar(.62, .62, .46, -45); bar(.46, .46, .76, -45)
+    elseif kind == "lock" then
+        local sh = create("Frame", {
+            AnchorPoint = Vector2.new(.5, 0), Position = UDim2.fromScale(.5, .06), Size = UDim2.fromScale(.44, .56),
+            BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = z, Parent = root,
+        })
+        create("UICorner", { CornerRadius = UDim.new(0, 99), Parent = sh })
+        local ss = create("UIStroke", { Thickness = th, Parent = sh })
+        paintTo(ss, "Color", color)
+        local body = create("Frame", {
+            AnchorPoint = Vector2.new(.5, 0), Position = UDim2.fromScale(.5, .46), Size = UDim2.fromScale(.74, .5),
+            BorderSizePixel = 0, ZIndex = z, Parent = root,
+        })
+        create("UICorner", { CornerRadius = UDim.new(0, 2), Parent = body })
+        paintTo(body, "BackgroundColor3", color)
+    end
+    return root
+end
+
+local function iconTween(root, t, color)
+    for _, d in ipairs(root:GetDescendants()) do
+        if d:IsA("Frame") and d.BackgroundTransparency < 1 then
+            tween(d, t, { BackgroundColor3 = color })
+        elseif d:IsA("UIStroke") then
+            tween(d, t, { Color = color })
+        end
+    end
+end
+
+-- status glyph: drawn icon for check / cross, plain text for "!" and "i"
+local DRAWN = { check = true, cross = true }
+local function statusGlyph(parent, glyph, textSize, color, z, alpha, frac)
+    if DRAWN[glyph] then
+        local g = drawIcon(parent, glyph, { size = UDim2.fromScale(frac or .5, frac or .5), color = color, z = z, thick = 2 })
+        g.GroupTransparency = alpha or 0
+        return g
+    end
+    return create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = glyph, TextTransparency = alpha or 0,
+        TextColor3 = color, TextSize = textSize, Font = Enum.Font.GothamBlack, ZIndex = z, Parent = parent,
+    })
+end
+local function fadeGlyph(g, t, a)
+    if g:IsA("CanvasGroup") then tween(g, t, { GroupTransparency = a }) else tween(g, t, { TextTransparency = a }) end
+end
+
 -- multi-touch safe tracking: a drag only follows the finger (InputObject) that started it.
 -- mouse: any MouseMovement / MouseButton1 counts.
 local function ownsMove(tracked, i)
@@ -661,10 +747,7 @@ function Nebula:Notify(o)
         BackgroundColor3 = st[1], BorderSizePixel = 0, Parent = card,
     })
     corner(icon, 18)
-    local iconTxt = create("TextLabel", {
-        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = st[2], TextTransparency = 1,
-        TextColor3 = BLACK, TextSize = 18, Font = Enum.Font.GothamBlack, Parent = icon,
-    })
+    local iconTxt = statusGlyph(icon, st[2], 18, BLACK, 1, 1, 0.5)
     -- anime picture inside the icon (status glyph moves to a small badge)
     local hasPic = false
     local pic = create("ImageLabel", {
@@ -678,16 +761,13 @@ function Nebula:Notify(o)
     })
     corner(badge, 8)
     create("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(14, 14, 16), Parent = badge })
-    create("TextLabel", {
-        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = st[2], TextColor3 = BLACK,
-        TextSize = 10, Font = Enum.Font.GothamBlack, ZIndex = 5, Parent = badge,
-    })
+    statusGlyph(badge, st[2], 10, BLACK, 5, 0, 0.62)
     self:_image(self.Icons.Notify, function(asset)
         if not pic.Parent then return end
         hasPic = true
         pic.Image = asset
         tween(pic, 0.35, { ImageTransparency = 0 })
-        tween(iconTxt, 0.2, { TextTransparency = 1 })
+        fadeGlyph(iconTxt, 0.2, 1)
         badge.Visible = true
     end)
 
@@ -740,7 +820,7 @@ function Nebula:Notify(o)
     tween(slide, 0.7, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Back)
     task.delay(0.2, function()
         tween(icon, 0.5, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
-        if not hasPic then tween(iconTxt, 0.3, { TextTransparency = 0 }) end
+        if not hasPic then fadeGlyph(iconTxt, 0.3, 0) end
     end)
     tween(bar, duration, { Size = UDim2.new(0, 0, 0, 3) }, Enum.EasingStyle.Linear)
     task.delay(duration, dismiss)
@@ -1470,11 +1550,7 @@ function Section:AddDropdown(o)
     local cur = text(head, "", 12, "Accent", Enum.Font.GothamBold)
     cur.Position = UDim2.new(0.45, 0, 0, 0); cur.Size = UDim2.new(0.55, -30, 1, 0)
     cur.TextXAlignment = Enum.TextXAlignment.Right
-    local arrow = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0),
-        Size = UDim2.fromOffset(16, 16), Text = "▾", TextSize = 14, Font = Enum.Font.GothamBold, Parent = head,
-    })
-    bind(arrow, "TextColor3", "SubText")
+    local arrow = drawIcon(head, "down", { size = 12, color = "SubText", pos = UDim2.new(1, -16, .5, 0), thick = 2 })
 
     local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, LayoutOrder = 2, Parent = root })
     create("UIListLayout", { Padding = UDim.new(0, 4), Parent = wrap })
@@ -1932,9 +2008,10 @@ function Section:AddOwner(o)
     bind(ng, "Color", "TextGrad")
     animate(name, function(t) ng.Offset = Vector2.new(math.sin(t * 1.3) * 0.65, 0) end, gateOf(self))
 
+    drawIcon(row, "check", { size = 11, color = Status.Success[1], anchor = Vector2.new(0, .5), pos = UDim2.fromOffset(76, 59), thick = 1.8 })
     local badge = create("TextLabel", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(76, 52), Size = UDim2.new(1, -190, 0, 14),
-        Text = "✓ Verified  ·  " .. (o.Subtitle or o.Link or ""), TextColor3 = Status.Success[1], TextSize = 10,
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(92, 52), Size = UDim2.new(1, -206, 0, 14),
+        Text = "Verified  ·  " .. (o.Subtitle or o.Link or ""), TextColor3 = Status.Success[1], TextSize = 10,
         Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
 
@@ -1954,12 +2031,147 @@ function Section:AddOwner(o)
     btn.MouseLeave:Connect(function() oh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(96, 30) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
         if setclipboard and o.Link then pcall(setclipboard, o.Link) end
-        btnL.Text = "COPIED ✓"
+        btnL.Text = "COPIED!"
         Nebula:Notify({ Title = "Link copied", Content = o.Link or "", Type = "Success", Duration = 2.5 })
         task.delay(1.6, function() btnL.Text = "COPY LINK" end)
         if o.Callback then task.spawn(o.Callback) end
     end)
-    return { Type = "Owner", SetVisible = function(_, b) row.Visible = b end }
+    -- YouTube + Discord cards under the owner card (o.Socials = false to hide, o.YouTube / o.Discord = link | false)
+    local rows = { row }
+    if o.Socials ~= false then
+        local yt = o.YouTube == nil and "https://youtube.com/@yqantg" or o.YouTube
+        local dc = o.Discord == nil and "https://discord.gg/yurKERvexU" or o.Discord
+        if yt then rows[#rows + 1] = self:AddSocial({ Kind = "YouTube", Link = yt, Image = o.YouTubeImage }).Row end
+        if dc then rows[#rows + 1] = self:AddSocial({ Kind = "Discord", Link = dc, Image = o.DiscordImage }).Row end
+    end
+    return { Type = "Owner", SetVisible = function(_, b) for _, r in ipairs(rows) do r.Visible = b end end }
+end
+
+-- same ping the Roblox performance HUD shows (Stats.PerformanceStats.Ping), with fallbacks
+local function readPing()
+    local Stats = game:GetService("Stats")
+    local ok, v = pcall(function()
+        local ps = Stats:FindFirstChild("PerformanceStats")
+        if not ps then return nil end
+        for _, n in ipairs({ "Ping", "NetworkPing" }) do
+            local it = ps:FindFirstChild(n)
+            if it then return it:GetValue() end
+        end
+    end)
+    if ok and type(v) == "number" and v > 0 then return v end
+    ok, v = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
+    if ok and type(v) == "number" and v > 0 then return v end
+    ok, v = pcall(function() return LocalPlayer:GetNetworkPing() * 2000 end)
+    if ok and type(v) == "number" then return v end
+    return 0
+end
+
+---------------------------------------------------------------- Social card (YouTube / Discord)
+-- o.Kind = "YouTube" | "Discord" · o.Link · o.Title · o.Subtitle · o.Image = id | url (banner / avatar, optional)
+local function playShape(parent, w, h, color, z)
+    local holder = create("Frame", {
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.53, .5),
+        Size = UDim2.fromOffset(w, h), ZIndex = z, Parent = parent,
+    })
+    local n = 14
+    for i = 0, n - 1 do
+        local mid = (i + 0.5) / n
+        local frac = 1 - math.abs(mid - 0.5) * 2
+        create("Frame", {
+            Position = UDim2.fromScale(0, i / n), Size = UDim2.new(frac, 0, 1 / n, 1),
+            BackgroundColor3 = color, BorderSizePixel = 0, ZIndex = z, Parent = holder,
+        })
+    end
+end
+
+function Section:AddSocial(o)
+    o = o or {}
+    local isYT = tostring(o.Kind or "YouTube"):lower():find("you", 1, true) ~= nil
+    local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
+    local link = o.Link or (isYT and "https://youtube.com/@yqantg" or "https://discord.gg/yurKERvexU")
+    local row = newRow(self, 88)
+
+    local thumb = create("Frame", {
+        Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(104, 64), BackgroundColor3 = WHITE,
+        BorderSizePixel = 0, ClipsDescendants = true, Parent = row,
+    })
+    corner(thumb, 10)
+    local tg = create("UIGradient", {
+        Color = ColorSequence.new(brand:Lerp(BLACK, 0.45), Color3.fromRGB(12, 12, 14)), Rotation = 35, Parent = thumb,
+    })
+    animate(thumb, function(t) tg.Rotation = 35 + math.sin(t * 1.2) * 20 end, gateOf(self))
+    local glow = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(90, 58),
+        BackgroundColor3 = brand, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 1, Parent = thumb,
+    })
+    corner(glow, 18)
+    local logo = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(64, 46), ZIndex = 2, Parent = thumb,
+    })
+    if isYT then
+        local plate = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(58, 40),
+            BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, ZIndex = 2, Parent = logo,
+        })
+        corner(plate, 12)
+        playShape(plate, 15, 17, WHITE, 3)
+    else
+        local head = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(48, 34),
+            BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = logo,
+        })
+        corner(head, 14)
+        for _, x in ipairs({ .32, .68 }) do
+            local eye = create("Frame", {
+                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(x, .46), Size = UDim2.fromOffset(7, 11),
+                BackgroundColor3 = brand, BorderSizePixel = 0, ZIndex = 3, Parent = head,
+            })
+            corner(eye, 4)
+        end
+    end
+    -- optional real picture (banner / avatar) fades in over the drawn logo
+    local pic = create("ImageLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Crop,
+        ImageTransparency = 1, ZIndex = 4, Parent = thumb,
+    })
+    if o.Image ~= nil and o.Image ~= false then
+        Nebula:_image(o.Image, function(asset)
+            if not pic.Parent then return end
+            pic.Image = asset
+            tween(pic, 0.4, { ImageTransparency = 0 })
+            logo.Visible = false; glow.Visible = false
+        end)
+    end
+
+    local tag = text(row, isYT and "YOUTUBE" or "DISCORD", 9, "SubText", Enum.Font.GothamBold)
+    tag.Position = UDim2.fromOffset(130, 13); tag.Size = UDim2.new(1, -234, 0, 12)
+    local name = text(row, o.Title or (isYT and "@yqantg" or "Yqantg Community"), 18, "Text", Enum.Font.GothamBlack)
+    name.Position = UDim2.fromOffset(130, 26); name.Size = UDim2.new(1, -234, 0, 24)
+    local sub = text(row, o.Subtitle or (isYT and "Subscribe for updates" or "Join the community"), 10, "SubText", Enum.Font.GothamMedium)
+    sub.Position = UDim2.fromOffset(130, 54); sub.Size = UDim2.new(1, -234, 0, 14)
+
+    local btn = create("TextButton", {
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -12, .5, 0), Size = UDim2.fromOffset(86, 30),
+        BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = row,
+    })
+    corner(btn, 8)
+    gradient(btn, "BtnGrad").Rotation = 90
+    local _, _, bh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
+    local btnL = create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "COPY LINK", ZIndex = 4,
+        TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, Parent = btn,
+    })
+    btn.MouseEnter:Connect(function() bh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(92, 32) }, Enum.EasingStyle.Back) end)
+    btn.MouseLeave:Connect(function() bh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(86, 30) }, Enum.EasingStyle.Back) end)
+    btn.MouseButton1Click:Connect(function()
+        if setclipboard then pcall(setclipboard, link) end
+        btnL.Text = "COPIED!"
+        Nebula:Notify({ Title = isYT and "YouTube link copied" or "Discord link copied", Content = link, Type = "Success", Duration = 2.5 })
+        task.delay(1.6, function() btnL.Text = "COPY LINK" end)
+        if o.Callback then task.spawn(o.Callback) end
+    end)
+    return { Type = "Social", Row = row, SetVisible = function(_, b) row.Visible = b end }
 end
 
 ---------------------------------------------------------------- Live stats (FPS / ping / server)
@@ -1992,8 +2204,7 @@ function Section:AddStats()
             frames, acc = 0, 0
             fpsL.Text = tostring(fps)
             tween(fpsL, 0.3, { TextColor3 = fps >= 50 and Status.Success[1] or (fps >= 30 and Status.Warning[1] or Status.Error[1]) })
-            local ok, ping = pcall(function() return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() end)
-            ping = ok and math.floor(ping) or 0
+            local ping = math.floor(readPing() + 0.5)
             pingL.Text = tostring(ping)
             tween(pingL, 0.3, { TextColor3 = ping < 100 and Status.Success[1] or (ping < 200 and Status.Warning[1] or Status.Error[1]) })
             tween(fill, 0.4, { Size = UDim2.fromScale(math.clamp(#Players:GetPlayers() / math.max(Players.MaxPlayers, 1), 0, 1), 1) })
@@ -2078,10 +2289,7 @@ function Tab:AddSection(o)
             Text = o.Name or "Section", TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold,
             TextXAlignment = Enum.TextXAlignment.Left, Parent = head,
         })
-        arrow = create("TextLabel", {
-            BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(1, -16, .5, 0),
-            Size = UDim2.fromOffset(16, 16), Text = "▾", TextColor3 = WHITE, TextSize = 14, Font = Enum.Font.GothamBold, Parent = head,
-        })
+        arrow = drawIcon(head, "down", { size = 12, color = WHITE, pos = UDim2.new(1, -16, .5, 0), thick = 2 })
         -- hover: header brightens, pip stretches
         head.MouseEnter:Connect(function()
             tween(hg, 0.25, { Offset = Vector2.new(0.25, 0) })
@@ -2207,7 +2415,7 @@ function Nebula:CreateWindow(cfg)
     -- cursor parallax: layers slide against each other, specular light follows the mouse
     local ptx, pty = 0, 0
     animate(Root, function()
-        if Nebula.Parallax then
+        if Nebula.Parallax and not touchOnly() then
             local m = UserInputService:GetMouseLocation()
             local c = Root.AbsolutePosition + Root.AbsoluteSize / 2
             ptx = math.clamp((m.X - c.X) / math.max(Root.AbsoluteSize.X, 1), -1, 1)
@@ -2348,16 +2556,16 @@ function Nebula:CreateWindow(cfg)
     -- 3D resize grip
     local grip = create("TextButton", {
         AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -3, 1, -3), Size = UDim2.fromOffset(18, 18),
-        BackgroundTransparency = 1, Text = "◢", TextSize = 14, Font = Enum.Font.GothamBold, ZIndex = 40, Parent = Main,
+        BackgroundTransparency = 1, Text = "", ZIndex = 40, Parent = Main,
     })
-    bind(grip, "TextColor3", "SubText")
+    local gripIcon = drawIcon(grip, "grip", { size = 12, color = "SubText", z = 41, thick = 1.6 })
     local gripScale = create("UIScale", { Parent = grip })
     grip.MouseEnter:Connect(function()
-        tween(grip, 0.2, { TextColor3 = resolve("Accent") })
+        iconTween(gripIcon, 0.2, resolve("Accent"))
         tween(gripScale, 0.25, { Scale = 1.3 }, Enum.EasingStyle.Back)
     end)
     grip.MouseLeave:Connect(function()
-        tween(grip, 0.2, { TextColor3 = resolve("SubText") })
+        iconTween(gripIcon, 0.2, resolve("SubText"))
         tween(gripScale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
     end)
     local rz
@@ -2821,15 +3029,10 @@ function Nebula:CreateWindow(cfg)
         b.ClipsDescendants = true
         local lab = text(b, tab.Name, 13, "SubText", Enum.Font.GothamMedium)
         lab.Position = UDim2.fromOffset(14, 0); lab.Size = UDim2.new(1, -44, 1, 0)
-        local arrow = create("TextLabel", {
-            BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0),
-            Size = UDim2.fromOffset(14, 14), Text = "›", TextColor3 = WHITE, TextSize = 18, Font = Enum.Font.GothamBold, Visible = false, Parent = b,
-        })
+        local arrow = drawIcon(b, "right", { size = 11, color = WHITE, pos = UDim2.new(1, -14, .5, 0), thick = 2 })
+        arrow.Visible = false
         if tab.Locked then
-            create("TextLabel", {
-                BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -8, .5, 0),
-                Size = UDim2.fromOffset(14, 14), Text = "🔒", TextSize = 11, Font = Enum.Font.Gotham, Parent = b,
-            })
+            drawIcon(b, "lock", { size = 13, color = Color3.fromRGB(240, 175, 60), pos = UDim2.new(1, -15, .5, 0), thick = 1.6 })
         end
 
         local group = create("CanvasGroup", {
@@ -2939,7 +3142,7 @@ function Nebula:CreateWindow(cfg)
     end
     local hovering = false
     animate(Root, function()
-        local h = inside(UserInputService:GetMouseLocation())
+        local h = (not touchOnly()) and inside(UserInputService:GetMouseLocation())
         if h ~= hovering then hovering = h; Nebula:_lock(hoverKey, h) end
     end)
     local pressed = {}   -- every finger that started on this window; unlock when all are up
