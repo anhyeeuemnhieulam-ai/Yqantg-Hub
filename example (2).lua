@@ -1,27 +1,32 @@
 --[[
-    Nebula UI  ·  example.lua
+    Yqantg Hub  ·  example.lua  (built with Nebula UI)
     Demo of every component. Copy what you need.
 ]]
 
 -- Load the library -------------------------------------------------------
--- From GitHub (replace with your raw link):
--- local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/source.lua"))()
--- From a local file (executor workspace):
+-- From GitHub (a link needs game:HttpGet, NOT readfile):
 local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"))()
+-- From a local file in the executor workspace:
+-- local Nebula = loadstring(readfile("Nebula/source.lua"))()
+
+local HUB_NAME = "Yqantg Hub"
+local HUB_LINK = "https://github.com/anhyeeuemnhieulam-ai/Yqantg-Hub"
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- Optional loading screen (yields until it finishes) ----------------------
 Nebula:Splash({
-    Title    = "NEBULA",
-    Subtitle = "UI Library · Demo",
-    Steps    = { "loading modules", "building interface", "finalizing" },
-    Duration = 2.4,
+    Title    = "YQANTG",
+    Subtitle = HUB_NAME .. "  ·  UI Library",
+    Steps    = { "loading modules", "building interface", "syncing config", "finalizing" },
+    Duration = 3,
 })
 
 -- Window ------------------------------------------------------------------
 local Window = Nebula:CreateWindow({
-    Title        = "Nebula Demo",
+    Title        = HUB_NAME,
+    Brand        = HUB_NAME,                     -- shown in the Settings panel
     Subtitle     = LocalPlayer.Name,             -- text under the title
     Size         = UDim2.fromOffset(600, 380),   -- auto-shrinks on small screens
     ToggleKey    = Enum.KeyCode.RightShift,      -- show / hide
@@ -33,16 +38,21 @@ local Window = Nebula:CreateWindow({
 ----------------------------------------------------------------------
 local Info = Window:AddTab("Info")
 
-local Welcome = Info:AddSection({ Name = "Welcome", Side = "Left" })
+-- Full-width cards (Side = "Full"; NoHeader hides the section title)
+local Cards = Info:AddSection({ Side = "Full", NoHeader = true })
+Cards:AddProfile()                               -- avatar, name, ID, account age, players
+Cards:AddOwner({ Name = HUB_NAME, Subtitle = "Official owner", Link = HUB_LINK })
+Cards:AddStats()                                 -- live FPS / ping / server fill
+
+local Welcome = Info:AddSection({ Name = "About", Side = "Left" })
 Welcome:AddParagraph({
-    Title   = "Hello, " .. LocalPlayer.DisplayName,
-    Content = "Nebula UI is a dark glass library with an animated glow border, themes and config saving.",
+    Title   = "Welcome to " .. HUB_NAME,
+    Content = "Glow border, smooth animations, themes and config saving.",
 })
-local playersLabel = Welcome:AddLabel("Players: " .. #Players:GetPlayers())
 Welcome:AddButton({
     Name = "Copy link",
     Callback = function()
-        if setclipboard then setclipboard("https://github.com/<user>/<repo>") end
+        if setclipboard then setclipboard(HUB_LINK) end
         Nebula:Notify({ Title = "Copied", Content = "Link copied to clipboard.", Type = "Success" })
     end,
 })
@@ -52,13 +62,6 @@ Notifs:AddButton({ Name = "Success", Callback = function() Nebula:Notify({ Title
 Notifs:AddButton({ Name = "Error",   Callback = function() Nebula:Notify({ Title = "Access Denied", Content = "You are not whitelisted.", Type = "Error" }) end })
 Notifs:AddButton({ Name = "Warning", Callback = function() Nebula:Notify({ Title = "Careful", Content = "Something looks off.", Type = "Warning" }) end })
 Notifs:AddButton({ Name = "Info",    Callback = function() Nebula:Notify({ Title = "FYI", Content = "Press RightShift to hide.", Type = "Info", Duration = 6 }) end })
-
-task.spawn(function()
-    while Window and task.wait(2) do
-        if Nebula._unloaded then break end
-        playersLabel:Set("Players: " .. #Players:GetPlayers())
-    end
-end)
 
 ----------------------------------------------------------------------
 -- Tab 2: Movement (sliders, toggles, keybind)
@@ -136,7 +139,7 @@ Window:AddTab({ Name = "Premium", Locked = true, LockedMessage = "You are not wh
 ----------------------------------------------------------------------
 Window:AddConfigTab("Config")
 
-Nebula:Notify({ Title = "Nebula loaded", Content = "Gear icon = themes & scale.", Type = "Success" })
+Nebula:Notify({ Title = HUB_NAME .. " loaded", Content = "Gear icon = themes & scale.", Type = "Success" })
 
 --[[ Handy API
     Nebula:SetTheme("Aqua")          -- Nebula | Crimson | Aqua | Emerald | Mono
