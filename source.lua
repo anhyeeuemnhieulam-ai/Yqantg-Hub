@@ -423,6 +423,19 @@ local function isMove(i)
     return i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch
 end
 
+-- multi-touch safe tracking: a drag only follows the finger (InputObject) that started it.
+-- mouse: any MouseMovement / MouseButton1 counts.
+local function ownsMove(tracked, i)
+    if not tracked then return false end
+    if tracked.UserInputType == Enum.UserInputType.Touch then return i == tracked end
+    return i.UserInputType == Enum.UserInputType.MouseMovement
+end
+local function ownsEnd(tracked, i)
+    if not tracked then return false end
+    if tracked.UserInputType == Enum.UserInputType.Touch then return i == tracked end
+    return i.UserInputType == Enum.UserInputType.MouseButton1
+end
+
 local function gradient(p, key, transparency)
     local g = create("UIGradient", { Parent = p })
     bind(g, "Color", key or "AccentGrad")
@@ -470,22 +483,23 @@ end
 
 -- keep: "window" (top bar always reachable) | "full" (fully on-screen) | nil
 local function makeDraggable(handle, target, getScale, onMove, keep)
-    local dragging, dragStart, startPos, startAbs = false, nil, nil, nil
+    local dragging, dragStart, startPos, startAbs, track = false, nil, nil, nil, nil
     local function stop()
         if dragging then dragging = false; Nebula:_lock("drag", false) end
     end
     handle.InputBegan:Connect(function(i)
         if isPress(i) then
-            dragging, dragStart, startPos, startAbs = true, i.Position, target.Position, target.AbsolutePosition
+            if dragging then return end   -- already held by another finger
+            dragging, dragStart, startPos, startAbs, track = true, i.Position, target.Position, target.AbsolutePosition, i
             Nebula:_lock("drag", true)
             i.Changed:Connect(function()
                 if i.UserInputState == Enum.UserInputState.End then stop() end
             end)
         end
     end)
-    connect(UserInputService.InputEnded, function(i) if isPress(i) then stop() end end)
+    connect(UserInputService.InputEnded, function(i) if dragging and ownsEnd(track, i) then stop() end end)
     connect(UserInputService.InputChanged, function(i)
-        if dragging and isMove(i) then
+        if dragging and ownsMove(track, i) then
             local d = i.Position - dragStart
             local s = getScale and getScale() or 1
             local par = target.Parent
@@ -1299,13 +1313,13 @@ function Section:AddSlider(o)
         local a = math.clamp((pos.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
         obj:Set(min + (max - min) * a)
     end
-    local hovering = false
+    local hovering, sTrack = false, nil
     local function knobSize(n) tween(knob, 0.2, { Size = UDim2.fromOffset(n, n) }, Enum.EasingStyle.Back) end
     hit.MouseEnter:Connect(function() hovering = true; if not dragging then knobSize(15) end end)
     hit.MouseLeave:Connect(function() hovering = false; if not dragging then knobSize(12) end end)
     hit.InputBegan:Connect(function(i)
-        if isPress(i) then
-            dragging = true
+        if isPress(i) and not dragging then
+            dragging = true; sTrack = i
             knobSize(18)
             tween(halo, 0.3, { Size = UDim2.fromOffset(36, 36) }, Enum.EasingStyle.Back)
             tween(v, 0.15, { TextColor3 = resolve("Accent"), TextSize = 14 })
@@ -1313,9 +1327,9 @@ function Section:AddSlider(o)
             fromInput(i.Position)
         end
     end)
-    connect(UserInputService.InputChanged, function(i) if dragging and isMove(i) then fromInput(i.Position) end end)
+    connect(UserInputService.InputChanged, function(i) if dragging and ownsMove(sTrack, i) then fromInput(i.Position) end end)
     connect(UserInputService.InputEnded, function(i)
-        if dragging and isPress(i) then
+        if dragging and ownsEnd(sTrack, i) then
             dragging = false
             self.Tab.Page.ScrollingEnabled = true
             knobSize(hovering and 15 or 12)
@@ -1767,7 +1781,7 @@ function Section:AddColorPicker(o)
         changed(obj, o, silent)
     end
 
-    local dragSV, dragH = false, false
+    local dragSV, dragH, cTrack = false, false, nil
     local function svFrom(pos)
         s = math.clamp((pos.X - svBox.AbsolutePosition.X) / math.max(svBox.AbsoluteSize.X, 1), 0, 1)
         v = 1 - math.clamp((pos.Y - svBox.AbsolutePosition.Y) / math.max(svBox.AbsoluteSize.Y, 1), 0, 1)
@@ -1780,26 +1794,26 @@ function Section:AddColorPicker(o)
     local svHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = svBox })
     local hHit = create("TextButton", { BackgroundTransparency = 1, Text = "", Size = UDim2.fromScale(1, 1), ZIndex = 4, Parent = hue })
     svHit.InputBegan:Connect(function(i)
-        if isPress(i) then
-            dragSV = true; self.Tab.Page.ScrollingEnabled = false
+        if isPress(i) and not (dragSV or dragH) then
+            dragSV = true; cTrack = i; self.Tab.Page.ScrollingEnabled = false
             tween(cur, 0.2, { Size = UDim2.fromOffset(16, 16) }, Enum.EasingStyle.Back)
             svFrom(i.Position)
         end
     end)
     hHit.InputBegan:Connect(function(i)
-        if isPress(i) then
-            dragH = true; self.Tab.Page.ScrollingEnabled = false
+        if isPress(i) and not (dragSV or dragH) then
+            dragH = true; cTrack = i; self.Tab.Page.ScrollingEnabled = false
             tween(hknob, 0.2, { Size = UDim2.fromOffset(8, 20) }, Enum.EasingStyle.Back)
             hFrom(i.Position)
         end
     end)
     connect(UserInputService.InputChanged, function(i)
-        if isMove(i) then
+        if (dragSV or dragH) and ownsMove(cTrack, i) then
             if dragSV then svFrom(i.Position) elseif dragH then hFrom(i.Position) end
         end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if isPress(i) and (dragSV or dragH) then
+        if (dragSV or dragH) and ownsEnd(cTrack, i) then
             dragSV, dragH = false, false
             self.Tab.Page.ScrollingEnabled = true
             tween(cur, 0.25, { Size = UDim2.fromOffset(10, 10) }, Enum.EasingStyle.Back)
@@ -2273,17 +2287,17 @@ function Nebula:CreateWindow(cfg)
 
     makeDraggable(top, Root, function() return scale.Scale end, nil, "full")
     -- window "lifts" off the surface while dragging, drops back with a bounce
-    local lifted = false
+    local lifted, liftTrack = false, nil
     top.InputBegan:Connect(function(i)
-        if isPress(i) then
-            lifted = true
+        if isPress(i) and not lifted then
+            lifted = true; liftTrack = i
             tween(glow, 0.2, { Thickness = 3.4 })
             tween(liftV, 0.25, { Value = 12 }, Enum.EasingStyle.Quint)
             tween(scale, 0.25, { Scale = Window._scale * 1.02 }, Enum.EasingStyle.Quint)
         end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if lifted and isPress(i) then
+        if lifted and ownsEnd(liftTrack, i) then
             lifted = false
             tween(glow, 0.35, { Thickness = 2 })
             tween(liftV, 0.55, { Value = 0 }, Enum.EasingStyle.Bounce)
@@ -2348,13 +2362,13 @@ function Nebula:CreateWindow(cfg)
     end)
     local rz
     grip.InputBegan:Connect(function(i)
-        if isPress(i) and not Window.Minimized then
-            rz = { p = i.Position, w = fs.X.Offset, h = fs.Y.Offset, pos = Root.Position }
+        if isPress(i) and not Window.Minimized and not rz then
+            rz = { track = i, p = i.Position, w = fs.X.Offset, h = fs.Y.Offset, pos = Root.Position }
             tween(liftV, 0.2, { Value = 8 })
         end
     end)
     connect(UserInputService.InputChanged, function(i)
-        if rz and isMove(i) then
+        if rz and ownsMove(rz.track, i) then
             local sc = scale.Scale
             local d = i.Position - rz.p
             local nw = math.clamp(rz.w + d.X / sc, 420, 1100)
@@ -2366,7 +2380,7 @@ function Nebula:CreateWindow(cfg)
         end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if rz and isPress(i) then
+        if rz and ownsEnd(rz.track, i) then
             rz = nil
             tween(liftV, 0.45, { Value = 0 }, Enum.EasingStyle.Bounce)
         end
@@ -2928,11 +2942,17 @@ function Nebula:CreateWindow(cfg)
         local h = inside(UserInputService:GetMouseLocation())
         if h ~= hovering then hovering = h; Nebula:_lock(hoverKey, h) end
     end)
+    local pressed = {}   -- every finger that started on this window; unlock when all are up
     connect(UserInputService.InputBegan, function(i)
-        if isPress(i) and inside(Vector2.new(i.Position.X, i.Position.Y)) then Nebula:_lock(pressKey, true) end
+        if isPress(i) and inside(Vector2.new(i.Position.X, i.Position.Y)) then
+            pressed[i] = true; Nebula:_lock(pressKey, true)
+        end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if isPress(i) then Nebula:_lock(pressKey, false) end
+        if pressed[i] then
+            pressed[i] = nil
+            if next(pressed) == nil then Nebula:_lock(pressKey, false) end
+        end
     end)
 
     if cfg.Background then
