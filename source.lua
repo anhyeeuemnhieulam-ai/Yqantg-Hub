@@ -289,7 +289,99 @@ Nebula.Themes = {
         Stroke = Color3.fromRGB(80, 80, 88),    Text    = Color3.fromRGB(240, 240, 243),
         SubText= Color3.fromRGB(158, 158, 168),
     },
+    Crimson = {
+        Accent = Color3.fromRGB(255, 82, 96), Accent2 = Color3.fromRGB(200, 50, 70),
+        Glow1  = Color3.fromRGB(255, 110, 120), Glow2   = Color3.fromRGB(20, 0, 2),
+        Btn1   = Color3.fromRGB(96, 28, 38), Btn2    = Color3.fromRGB(22, 6, 9),
+        Bg     = Color3.fromRGB(10, 5, 6), Side    = Color3.fromRGB(17, 8, 10),
+        Panel  = Color3.fromRGB(24, 11, 14), Element = Color3.fromRGB(34, 16, 20),
+        Stroke = Color3.fromRGB(84, 36, 44), Text    = Color3.fromRGB(255, 240, 241),
+        SubText= Color3.fromRGB(170, 128, 134),
+    },
+    Ocean = {
+        Accent = Color3.fromRGB(64, 170, 255), Accent2 = Color3.fromRGB(50, 120, 220),
+        Glow1  = Color3.fromRGB(110, 200, 255), Glow2   = Color3.fromRGB(0, 6, 18),
+        Btn1   = Color3.fromRGB(24, 60, 104), Btn2    = Color3.fromRGB(6, 14, 28),
+        Bg     = Color3.fromRGB(5, 9, 15), Side    = Color3.fromRGB(8, 14, 23),
+        Panel  = Color3.fromRGB(11, 20, 32), Element = Color3.fromRGB(16, 28, 44),
+        Stroke = Color3.fromRGB(34, 62, 98), Text    = Color3.fromRGB(236, 246, 255),
+        SubText= Color3.fromRGB(124, 148, 176),
+    },
+    Emerald = {
+        Accent = Color3.fromRGB(52, 225, 140), Accent2 = Color3.fromRGB(30, 160, 100),
+        Glow1  = Color3.fromRGB(110, 255, 184), Glow2   = Color3.fromRGB(0, 14, 8),
+        Btn1   = Color3.fromRGB(20, 84, 56), Btn2    = Color3.fromRGB(5, 22, 14),
+        Bg     = Color3.fromRGB(4, 10, 8), Side    = Color3.fromRGB(7, 17, 13),
+        Panel  = Color3.fromRGB(10, 24, 18), Element = Color3.fromRGB(15, 34, 26),
+        Stroke = Color3.fromRGB(32, 78, 58), Text    = Color3.fromRGB(234, 255, 244),
+        SubText= Color3.fromRGB(122, 166, 142),
+    },
+    Violet = {
+        Accent = Color3.fromRGB(170, 110, 255), Accent2 = Color3.fromRGB(120, 70, 220),
+        Glow1  = Color3.fromRGB(200, 150, 255), Glow2   = Color3.fromRGB(10, 0, 22),
+        Btn1   = Color3.fromRGB(60, 34, 110), Btn2    = Color3.fromRGB(14, 8, 28),
+        Bg     = Color3.fromRGB(8, 6, 14), Side    = Color3.fromRGB(13, 9, 22),
+        Panel  = Color3.fromRGB(19, 13, 32), Element = Color3.fromRGB(28, 19, 46),
+        Stroke = Color3.fromRGB(66, 46, 108), Text    = Color3.fromRGB(246, 240, 255),
+        SubText= Color3.fromRGB(150, 132, 182),
+    },
+    Sunset = {
+        Accent = Color3.fromRGB(255, 150, 70), Accent2 = Color3.fromRGB(230, 80, 100),
+        Glow1  = Color3.fromRGB(255, 190, 100), Glow2   = Color3.fromRGB(22, 4, 8),
+        Btn1   = Color3.fromRGB(112, 44, 40), Btn2    = Color3.fromRGB(26, 10, 10),
+        Bg     = Color3.fromRGB(12, 7, 7), Side    = Color3.fromRGB(20, 11, 10),
+        Panel  = Color3.fromRGB(28, 15, 14), Element = Color3.fromRGB(40, 22, 20),
+        Stroke = Color3.fromRGB(96, 54, 46), Text    = Color3.fromRGB(255, 243, 236),
+        SubText= Color3.fromRGB(178, 140, 126),
+    },
+    Sakura = {
+        Accent = Color3.fromRGB(255, 150, 200), Accent2 = Color3.fromRGB(220, 100, 160),
+        Glow1  = Color3.fromRGB(255, 190, 226), Glow2   = Color3.fromRGB(22, 4, 14),
+        Btn1   = Color3.fromRGB(104, 40, 76), Btn2    = Color3.fromRGB(26, 9, 19),
+        Bg     = Color3.fromRGB(12, 6, 9), Side    = Color3.fromRGB(20, 10, 15),
+        Panel  = Color3.fromRGB(28, 14, 21), Element = Color3.fromRGB(40, 20, 30),
+        Stroke = Color3.fromRGB(96, 48, 74), Text    = Color3.fromRGB(255, 240, 248),
+        SubText= Color3.fromRGB(176, 132, 152),
+    },
+    Gold = {
+        Accent = Color3.fromRGB(255, 206, 84), Accent2 = Color3.fromRGB(214, 150, 40),
+        Glow1  = Color3.fromRGB(255, 226, 140), Glow2   = Color3.fromRGB(20, 12, 0),
+        Btn1   = Color3.fromRGB(100, 72, 18), Btn2    = Color3.fromRGB(24, 17, 4),
+        Bg     = Color3.fromRGB(11, 9, 5), Side    = Color3.fromRGB(18, 14, 8),
+        Panel  = Color3.fromRGB(26, 21, 12), Element = Color3.fromRGB(37, 30, 17),
+        Stroke = Color3.fromRGB(92, 74, 34), Text    = Color3.fromRGB(255, 248, 232),
+        SubText= Color3.fromRGB(176, 160, 124),
+    },
+    Cyber = {
+        Accent = Color3.fromRGB(0, 255, 230), Accent2 = Color3.fromRGB(200, 30, 170),
+        Glow1  = Color3.fromRGB(0, 255, 230), Glow2   = Color3.fromRGB(30, 0, 24),
+        Btn1   = Color3.fromRGB(14, 70, 80), Btn2    = Color3.fromRGB(6, 8, 20),
+        Bg     = Color3.fromRGB(5, 6, 13), Side    = Color3.fromRGB(8, 10, 21),
+        Panel  = Color3.fromRGB(12, 14, 30), Element = Color3.fromRGB(18, 20, 42),
+        Stroke = Color3.fromRGB(36, 60, 90), Text    = Color3.fromRGB(232, 255, 252),
+        SubText= Color3.fromRGB(120, 160, 168),
+    },
+    Midnight = {
+        Accent = Color3.fromRGB(120, 140, 255), Accent2 = Color3.fromRGB(90, 100, 220),
+        Glow1  = Color3.fromRGB(160, 176, 255), Glow2   = Color3.fromRGB(0, 0, 16),
+        Btn1   = Color3.fromRGB(34, 40, 96), Btn2    = Color3.fromRGB(8, 10, 28),
+        Bg     = Color3.fromRGB(6, 7, 16), Side    = Color3.fromRGB(10, 12, 26),
+        Panel  = Color3.fromRGB(14, 17, 36), Element = Color3.fromRGB(21, 25, 52),
+        Stroke = Color3.fromRGB(44, 52, 110), Text    = Color3.fromRGB(238, 240, 255),
+        SubText= Color3.fromRGB(130, 138, 182),
+    },
+    Mint = {
+        Accent = Color3.fromRGB(140, 255, 214), Accent2 = Color3.fromRGB(60, 190, 175),
+        Glow1  = Color3.fromRGB(180, 255, 232), Glow2   = Color3.fromRGB(0, 16, 14),
+        Btn1   = Color3.fromRGB(24, 88, 84), Btn2    = Color3.fromRGB(6, 22, 22),
+        Bg     = Color3.fromRGB(5, 11, 11), Side    = Color3.fromRGB(8, 18, 18),
+        Panel  = Color3.fromRGB(12, 26, 26), Element = Color3.fromRGB(17, 37, 37),
+        Stroke = Color3.fromRGB(36, 84, 82), Text    = Color3.fromRGB(236, 255, 252),
+        SubText= Color3.fromRGB(124, 168, 164),
+    },
 }
+-- order shown in Settings > THEME (themes added later by you are appended alphabetically)
+Nebula.ThemeOrder = { "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
 
 -- status colors are shades of white/gray (icons tell them apart)
 local Status = {
@@ -2231,9 +2323,13 @@ local function readPing()
     local ok, v = pcall(function()
         local ps = Stats:FindFirstChild("PerformanceStats")
         if not ps then return nil end
-        for _, n in ipairs({ "Ping", "NetworkPing" }) do
+        -- the HUD row is called "NetworkPing": read that one first, then any other *Ping item
+        for _, n in ipairs({ "NetworkPing", "Ping" }) do
             local it = ps:FindFirstChild(n)
             if it then return it:GetValue() end
+        end
+        for _, it in ipairs(ps:GetChildren()) do
+            if it.Name:lower():find("ping") then return it:GetValue() end
         end
     end)
     if ok and type(v) == "number" and v > 0 then return v end
@@ -2702,10 +2798,11 @@ function Nebula:CreateWindow(cfg)
         BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = top,
     })
     bind(gearBtn, "BackgroundColor3", "Element")
-    corner(gearBtn, 16)
+    corner(gearBtn, 500)   -- always a full circle, also while it grows on hover
     local metal = create("Frame", {
         Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2, Parent = gearBtn,
     })
+    corner(metal, 500)     -- ClipsDescendants ignores rounded corners, so round the metal sheen itself
     local metalG = create("UIGradient", {
         Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
@@ -3054,17 +3151,27 @@ function Nebula:CreateWindow(cfg)
     end
 
     -- THEME (chips)
-    local themeNames = {}
-    for n in pairs(self.Themes) do themeNames[#themeNames + 1] = n end
-    table.sort(themeNames)
+    local themeNames, seenTheme = {}, {}
+    for _, n in ipairs(self.ThemeOrder or {}) do
+        if self.Themes[n] and not seenTheme[n] then seenTheme[n] = true; themeNames[#themeNames + 1] = n end
+    end
+    local extraThemes = {}
+    for n in pairs(self.Themes) do if not seenTheme[n] then extraThemes[#extraThemes + 1] = n end end
+    table.sort(extraThemes)
+    for _, n in ipairs(extraThemes) do themeNames[#themeNames + 1] = n end
     local themeCard = card("THEME")
-    local chipRow = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = nextLO(themeCard), ZIndex = 33, Parent = themeCard })
-    create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = chipRow })
-    local nT = math.max(#themeNames, 1)
+    -- chips wrap into a 3-column grid so any number of themes fits
+    local COLS, CHIP_H, CHIP_GAP = 3, 28, 6
+    local rowsT = math.max(math.ceil(#themeNames / COLS), 1)
+    local chipRow = create("Frame", { Size = UDim2.new(1, 0, 0, rowsT * CHIP_H + (rowsT - 1) * CHIP_GAP), BackgroundTransparency = 1, LayoutOrder = nextLO(themeCard), ZIndex = 33, Parent = themeCard })
+    create("UIGridLayout", {
+        CellSize = UDim2.new(1 / COLS, -(CHIP_GAP * (COLS - 1)) / COLS, 0, CHIP_H), CellPadding = UDim2.fromOffset(CHIP_GAP, CHIP_GAP),
+        SortOrder = Enum.SortOrder.LayoutOrder, Parent = chipRow,
+    })
     local themeBtns = {}
     for idx, n in ipairs(themeNames) do
         local b = create("TextButton", {
-            Size = UDim2.new(1 / nT, -(6 * (nT - 1)) / nT, 1, 0), BorderSizePixel = 0, AutoButtonColor = false, Text = "",
+            BorderSizePixel = 0, AutoButtonColor = false, Text = "",
             LayoutOrder = idx, ZIndex = 34, Parent = chipRow,
         })
         bind(b, "BackgroundColor3", "Panel")
