@@ -2271,7 +2271,7 @@ function Nebula:CreateWindow(cfg)
     closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = WHITE }); cx.TextColor3 = Color3.new(0, 0, 0) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = resolve("Element") }); cx.TextColor3 = resolve("SubText") end)
 
-    makeDraggable(top, Root, function() return scale.Scale end, nil, "window")
+    makeDraggable(top, Root, function() return scale.Scale end, nil, "full")
     -- window "lifts" off the surface while dragging, drops back with a bounce
     local lifted = false
     top.InputBegan:Connect(function(i)
@@ -2585,26 +2585,40 @@ function Nebula:CreateWindow(cfg)
         if state then intro() else outro() end
     end
 
+    -- minimize: collapses to a floating top bar (bobs in the air, drag it anywhere);
+    -- restore: the window flies back to the exact spot it had before minimizing
+    local savedPos
+    animate(Main, function(t)
+        Main.Position = UDim2.fromOffset(0, math.sin(t * 2.2) * 3)
+        Main.Rotation = math.sin(t * 1.6) * 1.4
+    end, function() return Window.Minimized end)
+
     function Window:Minimize()
         Window.Minimized = not Window.Minimized
         Nebula:_syncBlur()   -- minimized = no blur, restored = blur again
         setPanel(false)
         Nebula:_sfx("Click")
         grip.Visible = not Window.Minimized
-        tween(liftV, 0.2, { Value = 9 })
-        task.delay(0.25, function() tween(liftV, 0.5, { Value = 0 }, Enum.EasingStyle.Bounce) end)
         if Window.Minimized then
+            savedPos = Root.Position
+            tween(liftV, 0.25, { Value = 12 })
+            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Bounce) end)
             tween(Body, 0.2, { GroupTransparency = 1 })
             task.delay(0.12, function()
                 if Window.Minimized then
-                    tween(Root, 0.45, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Back)
+                    tween(Root, 0.5, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Back)
                 end
             end)
             task.delay(0.2, function() if Window.Minimized then Body.Visible = false end end)
         else
             Body.Visible = true
-            tween(Root, 0.5, { Size = fs }, Enum.EasingStyle.Back)
-            task.delay(0.2, function()
+            Root.Rotation = -6
+            tween(Main, 0.4, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Quad)
+            tween(liftV, 0.25, { Value = 14 })
+            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Bounce) end)
+            -- float back to the old place while growing back to full size
+            tween(Root, 0.75, { Size = fs, Position = savedPos or Root.Position, Rotation = 0 }, Enum.EasingStyle.Back)
+            task.delay(0.3, function()
                 if not Window.Minimized then
                     tween(Body, 0.35, { GroupTransparency = 0 })
                     if Window.ActiveTab then Window.ActiveTab:_cascade(0) end
