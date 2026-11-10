@@ -1,20 +1,21 @@
 --[[
-    ╔══════════════════════════════════════════════╗
-    ║  Nebula UI Library  ·  v1.1.0                ║
-    ║  Dark glass · animated glow border · mobile  ║
-    ╚══════════════════════════════════════════════╝
+    ╔══════════════════════════════════════════════════╗
+    ║  Nebula UI Library  ·  v1.2.0  ·  MONOCHROME      ║
+    ║  Pure black & white · comet glow border · glass   ║
+    ╚══════════════════════════════════════════════════╝
 
     Features
       • Draggable window, minimize, close, toggle key + floating orb (mobile)
       • Sidebar tabs with search, locked tabs, 2-column pages
       • Collapsible sections
-      • Toggle, Slider, Dropdown (single/multi/search), Input, Button,
-        Keybind, Label, Paragraph, Divider
+      • Toggle (pill switch), Slider, Dropdown (single/multi/search), Input,
+        Button (shine + comet border), Keybind, Label, Paragraph, Divider
       • Notifications (Success / Error / Warning / Info) with progress bar
-      • Built-in Settings panel (themes + UI scale)
+      • Built-in Settings panel (monochrome themes + UI scale)
       • Config save / load (writefile) + ready-made Config tab
       • Splash / loading screen
 
+    Themes: Obsidian (default) | Eclipse (OLED black) | Graphite
     Usage: see example.lua
 ]]
 
@@ -28,11 +29,11 @@ local HttpService      = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 local Nebula = {
-    Version      = "1.1.0",
+    Version      = "1.2.0",
     Flags        = {},
     Options      = {},
     Windows      = {},
-    CurrentTheme = "Nebula",
+    CurrentTheme = "Obsidian",
     ConfigFolder = "NebulaUI",
     _themed  = {},
     _refresh = {},
@@ -43,53 +44,41 @@ local Nebula = {
 -- Themes
 ----------------------------------------------------------------------
 Nebula.Themes = {
-    Nebula = {
-        Accent = Color3.fromRGB(139, 92, 246), Accent2 = Color3.fromRGB(86, 58, 196),
-        Glow1  = Color3.fromRGB(80, 220, 255), Glow2   = Color3.fromRGB(190, 90, 255),
-        Bg     = Color3.fromRGB(13, 12, 19),   Side    = Color3.fromRGB(17, 16, 26),
-        Panel  = Color3.fromRGB(21, 20, 32),   Element = Color3.fromRGB(29, 27, 43),
-        Stroke = Color3.fromRGB(54, 48, 82),   Text    = Color3.fromRGB(240, 238, 250),
-        SubText= Color3.fromRGB(150, 145, 178),
+    Obsidian = {
+        Accent = Color3.fromRGB(255, 255, 255), Accent2 = Color3.fromRGB(125, 125, 130),
+        Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(0, 0, 0),
+        Btn1   = Color3.fromRGB(62, 62, 68),    Btn2    = Color3.fromRGB(14, 14, 16),
+        Bg     = Color3.fromRGB(8, 8, 9),       Side    = Color3.fromRGB(13, 13, 15),
+        Panel  = Color3.fromRGB(18, 18, 20),    Element = Color3.fromRGB(26, 26, 29),
+        Stroke = Color3.fromRGB(62, 62, 68),    Text    = Color3.fromRGB(245, 245, 247),
+        SubText= Color3.fromRGB(140, 140, 148),
     },
-    Crimson = {
-        Accent = Color3.fromRGB(244, 63, 94),  Accent2 = Color3.fromRGB(159, 28, 60),
-        Glow1  = Color3.fromRGB(251, 146, 60), Glow2   = Color3.fromRGB(244, 63, 94),
-        Bg     = Color3.fromRGB(16, 11, 13),   Side    = Color3.fromRGB(22, 14, 17),
-        Panel  = Color3.fromRGB(28, 18, 22),   Element = Color3.fromRGB(38, 24, 29),
-        Stroke = Color3.fromRGB(78, 44, 52),   Text    = Color3.fromRGB(250, 238, 240),
-        SubText= Color3.fromRGB(176, 143, 150),
+    Eclipse = {
+        Accent = Color3.fromRGB(240, 240, 240), Accent2 = Color3.fromRGB(90, 90, 94),
+        Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(0, 0, 0),
+        Btn1   = Color3.fromRGB(44, 44, 48),    Btn2    = Color3.fromRGB(0, 0, 0),
+        Bg     = Color3.fromRGB(0, 0, 0),       Side    = Color3.fromRGB(6, 6, 7),
+        Panel  = Color3.fromRGB(11, 11, 12),    Element = Color3.fromRGB(18, 18, 20),
+        Stroke = Color3.fromRGB(48, 48, 52),    Text    = Color3.fromRGB(255, 255, 255),
+        SubText= Color3.fromRGB(120, 120, 126),
     },
-    Aqua = {
-        Accent = Color3.fromRGB(34, 211, 238), Accent2 = Color3.fromRGB(14, 116, 144),
-        Glow1  = Color3.fromRGB(52, 211, 153), Glow2   = Color3.fromRGB(56, 189, 248),
-        Bg     = Color3.fromRGB(10, 15, 19),   Side    = Color3.fromRGB(13, 20, 26),
-        Panel  = Color3.fromRGB(17, 26, 33),   Element = Color3.fromRGB(23, 35, 45),
-        Stroke = Color3.fromRGB(38, 62, 78),   Text    = Color3.fromRGB(236, 247, 250),
-        SubText= Color3.fromRGB(134, 164, 176),
-    },
-    Emerald = {
-        Accent = Color3.fromRGB(52, 211, 105), Accent2 = Color3.fromRGB(21, 128, 61),
-        Glow1  = Color3.fromRGB(163, 230, 53), Glow2   = Color3.fromRGB(45, 212, 191),
-        Bg     = Color3.fromRGB(10, 16, 13),   Side    = Color3.fromRGB(13, 22, 17),
-        Panel  = Color3.fromRGB(17, 29, 22),   Element = Color3.fromRGB(23, 40, 30),
-        Stroke = Color3.fromRGB(38, 78, 55),   Text    = Color3.fromRGB(237, 250, 242),
-        SubText= Color3.fromRGB(135, 176, 150),
-    },
-    Mono = {
-        Accent = Color3.fromRGB(226, 226, 232), Accent2 = Color3.fromRGB(110, 110, 124),
-        Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(120, 120, 135),
-        Bg     = Color3.fromRGB(12, 12, 14),    Side    = Color3.fromRGB(17, 17, 20),
-        Panel  = Color3.fromRGB(22, 22, 26),    Element = Color3.fromRGB(30, 30, 35),
-        Stroke = Color3.fromRGB(60, 60, 68),    Text    = Color3.fromRGB(245, 245, 248),
-        SubText= Color3.fromRGB(148, 148, 158),
+    Graphite = {
+        Accent = Color3.fromRGB(228, 228, 231), Accent2 = Color3.fromRGB(110, 110, 116),
+        Glow1  = Color3.fromRGB(240, 240, 244), Glow2   = Color3.fromRGB(22, 22, 25),
+        Btn1   = Color3.fromRGB(80, 80, 86),    Btn2    = Color3.fromRGB(30, 30, 33),
+        Bg     = Color3.fromRGB(20, 20, 23),    Side    = Color3.fromRGB(26, 26, 30),
+        Panel  = Color3.fromRGB(32, 32, 36),    Element = Color3.fromRGB(41, 41, 46),
+        Stroke = Color3.fromRGB(80, 80, 88),    Text    = Color3.fromRGB(240, 240, 243),
+        SubText= Color3.fromRGB(158, 158, 168),
     },
 }
 
+-- status colors are shades of white/gray (icons tell them apart)
 local Status = {
-    Success = { Color3.fromRGB(74, 222, 128),  "✓", "SUCCESS" },
-    Error   = { Color3.fromRGB(248, 81, 92),   "✕", "ERROR" },
-    Warning = { Color3.fromRGB(250, 204, 21),  "!", "WARNING" },
-    Info    = { Color3.fromRGB(96, 165, 250),  "i", "INFO" },
+    Success = { Color3.fromRGB(255, 255, 255), "✓", "SUCCESS" },
+    Error   = { Color3.fromRGB(226, 226, 231), "✕", "ERROR" },
+    Warning = { Color3.fromRGB(190, 190, 197), "!", "WARNING" },
+    Info    = { Color3.fromRGB(152, 152, 160), "i", "INFO" },
 }
 
 ----------------------------------------------------------------------
@@ -113,11 +102,21 @@ local function resolve(key)
     if key == "AccentGrad" then
         return ColorSequence.new(th.Accent, th.Accent2)
     elseif key == "GlowGrad" then
+        -- comet: bright head fading into black (sharp, rotating border)
         return ColorSequence.new({
             ColorSequenceKeypoint.new(0, th.Glow1),
-            ColorSequenceKeypoint.new(0.5, th.Glow2),
+            ColorSequenceKeypoint.new(0.35, th.Glow2),
+            ColorSequenceKeypoint.new(0.65, th.Glow2),
             ColorSequenceKeypoint.new(1, th.Glow1),
         })
+    elseif key == "TextGrad" then
+        return ColorSequence.new({
+            ColorSequenceKeypoint.new(0, th.Accent),
+            ColorSequenceKeypoint.new(0.5, th.Accent2),
+            ColorSequenceKeypoint.new(1, th.Accent),
+        })
+    elseif key == "BtnGrad" then
+        return ColorSequence.new(th.Btn1, th.Btn2)
     end
     return th[key]
 end
@@ -177,6 +176,28 @@ local function gradient(p, key, transparency)
     bind(g, "Color", key or "AccentGrad")
     if transparency then g.Transparency = transparency end
     return g
+end
+
+-- subtle white -> gray glass sheen (multiplies the frame colour)
+local function sheen(p, rot, level)
+    local d = level or 175
+    return create("UIGradient", {
+        Color = ColorSequence.new(WHITE, Color3.fromRGB(d, d, d)),
+        Rotation = rot or 90, Parent = p,
+    })
+end
+
+-- rotating black/white comet border
+local function glowStroke(p, thick, speed, tr)
+    local s = create("UIStroke", {
+        Thickness = thick or 1, Color = WHITE, Transparency = tr or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = p,
+    })
+    local g = gradient(s, "GlowGrad")
+    local c = connect(RunService.Heartbeat, function()
+        if p.Parent then g.Rotation = (os.clock() * (speed or 60)) % 360 end
+    end)
+    return s, g, c
 end
 
 local function makeDraggable(handle, target, getScale, onMove)
@@ -253,6 +274,7 @@ function Nebula:Notify(o)
     local st = Status[o.Type or "Info"] or Status.Info
     local duration = o.Duration or 4
     self._notifCount = (self._notifCount or 0) + 1
+    local BLACK = Color3.new(0, 0, 0)
 
     local wrap = create("Frame", {
         BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 68),
@@ -260,53 +282,62 @@ function Nebula:Notify(o)
     })
     local card = create("Frame", {
         Size = UDim2.new(1, 0, 1, 0), Position = UDim2.fromOffset(330, 0),
-        BorderSizePixel = 0, ClipsDescendants = true, Parent = wrap,
+        BackgroundColor3 = Color3.fromRGB(14, 14, 16), BorderSizePixel = 0, ClipsDescendants = true, Parent = wrap,
     })
-    bind(card, "BackgroundColor3", "Panel")
     corner(card, 10)
-    local cs = create("UIStroke", { Thickness = 1, Transparency = 0.35, Color = st[1], Parent = card })
+    sheen(card, 20, 120)
+    local _, _, spin = glowStroke(card, 1.2, 90, 0.2)
 
     local icon = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(0, 0), Position = UDim2.fromOffset(28, 34),
-        BackgroundColor3 = st[1], Parent = card,
+        BackgroundColor3 = st[1], BorderSizePixel = 0, Parent = card,
     })
     corner(icon, 18)
     local iconTxt = create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = st[2], TextTransparency = 1,
-        TextColor3 = Color3.new(1, 1, 1), TextSize = 18, Font = Enum.Font.GothamBold, Parent = icon,
+        TextColor3 = BLACK, TextSize = 18, Font = Enum.Font.GothamBlack, Parent = icon,
     })
 
     local tag = create("TextLabel", {
         BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 7), Size = UDim2.new(1, -110, 0, 12),
-        Text = "●  " .. st[3], TextColor3 = st[1], TextSize = 9, Font = Enum.Font.GothamBold,
+        Text = "●  " .. st[3], TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 9, Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left, Parent = card,
     })
-    local title = text(card, o.Title or "Notification", 13, "Text", Enum.Font.GothamBold)
-    title.Position = UDim2.fromOffset(56, 21); title.Size = UDim2.new(1, -66, 0, 16)
-    local body = text(card, o.Content or "", 11, "SubText", Enum.Font.Gotham)
-    body.Position = UDim2.fromOffset(56, 38); body.Size = UDim2.new(1, -66, 0, 14)
-
-    local clock = text(card, os.date("%H:%M"), 10, "SubText", Enum.Font.Gotham)
-    clock.Position = UDim2.new(1, -62, 0, 7); clock.Size = UDim2.fromOffset(34, 12)
-    clock.TextXAlignment = Enum.TextXAlignment.Right
+    local title = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 21), Size = UDim2.new(1, -66, 0, 16),
+        Text = o.Title or "Notification", TextColor3 = Color3.fromRGB(250, 250, 252), TextSize = 13,
+        Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
+    })
+    local body = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 38), Size = UDim2.new(1, -66, 0, 14),
+        Text = o.Content or "", TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 11,
+        Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
+    })
+    local clock = create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.new(1, -62, 0, 7), Size = UDim2.fromOffset(34, 12),
+        Text = os.date("%H:%M"), TextColor3 = Color3.fromRGB(110, 110, 118), TextSize = 10,
+        Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Right, Parent = card,
+    })
 
     local close = create("TextButton", {
         BackgroundTransparency = 1, Position = UDim2.new(1, -24, 0, 4), Size = UDim2.fromOffset(20, 18),
-        Text = "X", TextSize = 11, Font = Enum.Font.GothamBold, Parent = card,
+        Text = "X", TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 11, Font = Enum.Font.GothamBold, Parent = card,
     })
-    bind(close, "TextColor3", "SubText")
 
     local bar = create("Frame", {
         Position = UDim2.new(0, 0, 1, -3), Size = UDim2.new(1, 0, 0, 3),
-        BackgroundColor3 = st[1], BorderSizePixel = 0, BackgroundTransparency = 0.15, Parent = card,
+        BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = card,
     })
+    gradient(bar, "AccentGrad")
 
     local dead = false
     local function dismiss()
         if dead then return end
         dead = true
         tween(card, 0.3, { Position = UDim2.fromOffset(330, 0) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        task.delay(0.32, function() wrap:Destroy() end)
+        task.delay(0.32, function() spin:Disconnect(); wrap:Destroy() end)
     end
     close.MouseButton1Click:Connect(dismiss)
 
@@ -329,7 +360,14 @@ function Nebula:Splash(o)
     local total = o.Duration or 3
 
     local root = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 200, Parent = g })
-    local bgG = create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(7, 7, 11), Color3.fromRGB(26, 14, 46)), Rotation = 45, Parent = root })
+    local bgG = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(44, 44, 48)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+        }),
+        Rotation = 45, Parent = root,
+    })
 
     local outer = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, -62), Size = UDim2.fromOffset(150, 150),
@@ -371,7 +409,7 @@ function Nebula:Splash(o)
         MaxVisibleGraphemes = 0, ZIndex = 201, TextColor3 = WHITE, Parent = root,
     })
     local tg = create("UIGradient", { Parent = title })
-    bind(tg, "Color", "GlowGrad")
+    bind(tg, "Color", "TextGrad")
 
     local sub = create("TextLabel", {
         BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 64),
@@ -519,8 +557,9 @@ local function newRow(section, height)
     })
     bind(row, "BackgroundColor3", "Element")
     corner(row, 8)
+    sheen(row, 90, 200)
     local st = stroke(row, "Stroke", 1, 0.5)
-    row.MouseEnter:Connect(function() tween(st, 0.18, { Color = resolve("Accent"), Transparency = 0.1 }) end)
+    row.MouseEnter:Connect(function() tween(st, 0.18, { Color = resolve("Accent"), Transparency = 0.35 }) end)
     row.MouseLeave:Connect(function() tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.5 }) end)
     return row
 end
@@ -583,35 +622,49 @@ end
 function Section:AddButton(o)
     local obj = { Type = "Button" }
     local btn = create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0,
         AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = self.Body,
     })
     corner(btn, 8)
-    gradient(btn, "AccentGrad")
-    local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, Parent = btn })
+    gradient(btn, "BtnGrad").Rotation = 90
+    local bst = glowStroke(btn, 1.2, 70, 0.6)
+    local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = btn })
     corner(shade, 8)
+    -- diagonal shine that sweeps across on hover
+    local shine = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(0, -40, .5, 0), Size = UDim2.new(0, 24, 2.4, 0),
+        Rotation = 20, BackgroundColor3 = WHITE, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 2, Parent = btn,
+    })
     local l = create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = o.Name or "Button",
         TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 4, Parent = btn,
     })
     local sc = self.Tab.Window._scaleObj
-    btn.MouseEnter:Connect(function() tween(shade, 0.15, { BackgroundTransparency = 0.88 }) end)
-    btn.MouseLeave:Connect(function() tween(shade, 0.15, { BackgroundTransparency = 1 }) end)
+    btn.MouseEnter:Connect(function()
+        tween(shade, 0.2, { BackgroundTransparency = 0.94 })
+        tween(bst, 0.2, { Transparency = 0 })
+        shine.Position = UDim2.new(0, -40, .5, 0)
+        tween(shine, 0.7, { Position = UDim2.new(1, 40, .5, 0) }, Enum.EasingStyle.Quad)
+    end)
+    btn.MouseLeave:Connect(function()
+        tween(shade, 0.2, { BackgroundTransparency = 1 })
+        tween(bst, 0.25, { Transparency = 0.6 })
+    end)
     btn.MouseButton1Down:Connect(function(x)
-        tween(shade, 0.08, { BackgroundTransparency = 0.7 })
+        tween(shade, 0.08, { BackgroundTransparency = 0.8 })
         local s = sc and sc.Scale or 1
         local rx = (x - btn.AbsolutePosition.X) / s
         local d = (btn.AbsoluteSize.X / s) * 2.2
         local r = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, 16), Size = UDim2.fromOffset(0, 0),
-            BackgroundColor3 = WHITE, BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 3, Parent = btn,
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, 17), Size = UDim2.fromOffset(0, 0),
+            BackgroundColor3 = WHITE, BackgroundTransparency = 0.7, BorderSizePixel = 0, ZIndex = 3, Parent = btn,
         })
         corner(r, 400)
         tween(r, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
         task.delay(0.6, function() r:Destroy() end)
     end)
     btn.MouseButton1Click:Connect(function()
-        tween(shade, 0.15, { BackgroundTransparency = 0.88 })
+        tween(shade, 0.15, { BackgroundTransparency = 0.94 })
         if o.Callback then task.spawn(o.Callback) end
     end)
     function obj:SetText(s) l.Text = s end
@@ -622,38 +675,35 @@ end
 ---------------------------------------------------------------- Toggle
 function Section:AddToggle(o)
     local obj = { Type = "Toggle", Value = o.Default == true }
-    local row = newRow(self, 34)
+    local row = newRow(self, 36)
     local l = text(row, o.Name or "Toggle", 13)
-    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -48, 1, 0)
+    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -64, 1, 0)
 
-    local box = create("Frame", {
-        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -9, .5, 0),
-        Size = UDim2.fromOffset(20, 20), BorderSizePixel = 0, Parent = row,
+    local track = create("Frame", {
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0),
+        Size = UDim2.fromOffset(40, 20), BorderSizePixel = 0, Parent = row,
     })
-    corner(box, 6)
-    local bs = stroke(box, "Stroke", 1, 0.2)
-    local check = create("TextLabel", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1,
-        Size = UDim2.fromScale(1, 1), Text = "✓", TextSize = 14,
-        Font = Enum.Font.GothamBold, TextColor3 = WHITE, Parent = box,
+    corner(track, 10)
+    gradient(track, "AccentGrad")
+    local ts = stroke(track, "Stroke", 1, 0.2)
+    local knob = create("Frame", {
+        AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 3, .5, 0),
+        Size = UDim2.fromOffset(14, 14), BorderSizePixel = 0, Parent = track,
     })
+    corner(knob, 7)
     local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", Parent = row })
 
     local function render(animate)
         local on = obj.Value
-        tween(box, 0.2, { BackgroundColor3 = on and resolve("Accent") or resolve("Panel") })
-        tween(check, 0.2, { TextTransparency = on and 0 or 1 })
-        tween(bs, 0.2, { Transparency = on and 1 or 0.2 })
+        tween(track, 0.25, { BackgroundColor3 = on and WHITE or resolve("Panel") })
+        tween(ts, 0.25, { Transparency = on and 1 or 0.2 })
+        tween(knob, animate and 0.4 or 0, {
+            Position = on and UDim2.new(1, -17, .5, 0) or UDim2.new(0, 3, .5, 0),
+            BackgroundColor3 = on and Color3.fromRGB(10, 10, 12) or resolve("SubText"),
+        }, Enum.EasingStyle.Back)
         if animate then
-            if on then
-                check.Rotation = -40
-                tween(check, 0.4, { Rotation = 0 }, Enum.EasingStyle.Back)
-                box.Size = UDim2.fromOffset(27, 27)
-                tween(box, 0.45, { Size = UDim2.fromOffset(20, 20) }, Enum.EasingStyle.Back)
-            else
-                box.Size = UDim2.fromOffset(16, 16)
-                tween(box, 0.35, { Size = UDim2.fromOffset(20, 20) }, Enum.EasingStyle.Back)
-            end
+            knob.Size = UDim2.fromOffset(20, 14)
+            tween(knob, 0.4, { Size = UDim2.fromOffset(14, 14) }, Enum.EasingStyle.Back)
         end
     end
     onTheme(function() render(false) end)
@@ -694,6 +744,7 @@ function Section:AddSlider(o)
         BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track,
     })
     corner(knob, 6)
+    stroke(knob, "Bg", 2, 0)
     local hit = create("TextButton", { BackgroundTransparency = 1, Text = "", Position = UDim2.fromOffset(0, 22), Size = UDim2.new(1, 0, 0, 24), Parent = row })
 
     local function fmt(x)
@@ -905,7 +956,7 @@ function Section:AddDropdown(o)
         cur.Text = display()
         for k, it in pairs(items) do
             local sel = obj.Multi and obj.Value[k] or (not obj.Multi and obj.Value == k)
-            tween(it[1], 0.15, { BackgroundTransparency = sel and 0.7 or 1 })
+            tween(it[1], 0.15, { BackgroundTransparency = sel and 0.86 or 1 })
             it[2].TextColor3 = sel and resolve("Text") or resolve("SubText")
         end
     end
@@ -1032,7 +1083,7 @@ function Section:AddOwner(o)
     ig.Rotation = 45
     create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = (o.Name or "Y"):sub(1, 1):upper(),
-        TextColor3 = WHITE, TextSize = 28, Font = Enum.Font.GothamBlack, Parent = icon,
+        TextColor3 = Color3.new(0, 0, 0), TextSize = 28, Font = Enum.Font.GothamBlack, Parent = icon,
     })
     connect(RunService.Heartbeat, function() ig.Rotation = 45 + math.sin(os.clock() * 1.5) * 40 end)
 
@@ -1045,7 +1096,7 @@ function Section:AddOwner(o)
         TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
     })
     local ng = create("UIGradient", { Parent = name })
-    bind(ng, "Color", "GlowGrad")
+    bind(ng, "Color", "TextGrad")
     connect(RunService.Heartbeat, function() ng.Offset = Vector2.new(math.sin(os.clock() * 1.3) * 0.65, 0) end)
 
     local badge = create("TextLabel", {
@@ -1056,18 +1107,23 @@ function Section:AddOwner(o)
 
     local btn = create("TextButton", {
         AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -12, .5, 0), Size = UDim2.fromOffset(96, 30),
-        BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "COPY LINK",
+        BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
         TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, ClipsDescendants = true, Parent = row,
     })
     corner(btn, 8)
-    gradient(btn, "AccentGrad")
+    gradient(btn, "BtnGrad").Rotation = 90
+    glowStroke(btn, 1.2, 70, 0.35)
+    local btnL = create("TextLabel", {
+        BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "COPY LINK", ZIndex = 4,
+        TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, Parent = btn,
+    })
     btn.MouseEnter:Connect(function() tween(btn, 0.2, { Size = UDim2.fromOffset(102, 32) }, Enum.EasingStyle.Back) end)
     btn.MouseLeave:Connect(function() tween(btn, 0.2, { Size = UDim2.fromOffset(96, 30) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
         if setclipboard and o.Link then pcall(setclipboard, o.Link) end
-        btn.Text = "COPIED ✓"
+        btnL.Text = "COPIED ✓"
         Nebula:Notify({ Title = "Link copied", Content = o.Link or "", Type = "Success", Duration = 2.5 })
-        task.delay(1.6, function() btn.Text = "COPY LINK" end)
+        task.delay(1.6, function() btnL.Text = "COPY LINK" end)
         if o.Callback then task.spawn(o.Callback) end
     end)
     return { Type = "Owner", SetVisible = function(_, b) row.Visible = b end }
@@ -1141,6 +1197,7 @@ function Tab:AddSection(o)
     bind(frame, "BackgroundColor3", "Panel")
     corner(frame, 10)
     local fst = stroke(frame, "Stroke", 1, 0.5)
+    sheen(frame, 90, 185)
     local pad = create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), Parent = frame })
     create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
     if o.NoHeader then
@@ -1156,7 +1213,7 @@ function Tab:AddSection(o)
             AutoButtonColor = false, Text = "", LayoutOrder = 1, Parent = frame,
         })
         corner(head, 8)
-        local hg = gradient(head, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.85) }))
+        local hg = gradient(head, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.82), NumberSequenceKeypoint.new(1, 0.97) }))
         local pip = create("Frame", { Position = UDim2.fromOffset(8, 7), Size = UDim2.fromOffset(3, 14), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = head })
         corner(pip, 2)
         tl = create("TextLabel", {
@@ -1249,6 +1306,7 @@ function Nebula:CreateWindow(cfg)
     })
     bind(Main, "BackgroundColor3", "Bg")
     corner(Main, 12)
+    sheen(Main, 65, 150)
 
     -- auto-fit to small screens
     local base = 1
@@ -1262,7 +1320,7 @@ function Nebula:CreateWindow(cfg)
     Window._scaleObj = scale
 
     -- animated glow border
-    local glow = create("UIStroke", { Thickness = 1.6, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = WHITE, Parent = Main })
+    local glow = create("UIStroke", { Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = WHITE, Parent = Main })
     local glowG = gradient(glow, "GlowGrad")
     connect(RunService.Heartbeat, function()
         if Main.Visible then glowG.Rotation = (os.clock() * 45) % 360 end
@@ -1271,6 +1329,7 @@ function Nebula:CreateWindow(cfg)
     ------------------------------------------------ topbar
     local top = create("Frame", { Size = UDim2.new(1, 0, 0, TOP), BorderSizePixel = 0, Parent = Main })
     bind(top, "BackgroundColor3", "Side")
+    sheen(top, 0, 165)
 
     local avatar = create("ImageLabel", {
         Position = UDim2.fromOffset(10, 7), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = 0,
@@ -1278,8 +1337,13 @@ function Nebula:CreateWindow(cfg)
     })
     bind(avatar, "BackgroundColor3", "Element")
     corner(avatar, 14)
+    glowStroke(avatar, 1.6, 120, 0)
     local title = text(top, cfg.Title or "Nebula", 14, "Text", Enum.Font.GothamBold)
     title.Position = UDim2.fromOffset(46, 5); title.Size = UDim2.fromOffset(SIDE - 46, 16)
+    local ttg = gradient(title, "TextGrad")
+    connect(RunService.Heartbeat, function()
+        if Main.Visible then ttg.Offset = Vector2.new(math.sin(os.clock() * 1.2) * 0.55, 0) end
+    end)
     local subtitle = text(top, "●  " .. (cfg.Subtitle or LocalPlayer.Name), 10, "SubText", Enum.Font.Gotham)
     subtitle.Position = UDim2.fromOffset(46, 21); subtitle.Size = UDim2.fromOffset(SIDE - 46, 14)
 
@@ -1290,6 +1354,8 @@ function Nebula:CreateWindow(cfg)
         })
         bind(b, "BackgroundColor3", "Element")
         corner(b, 7)
+        b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = resolve("Stroke") }) end)
+        b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = resolve("Element") }) end)
         return b
     end
     local function bar(parent, x, y, w, h)
@@ -1307,7 +1373,7 @@ function Nebula:CreateWindow(cfg)
     local setBtn = topButton(74)
     bar(setBtn, 0, -4, 12, 2); bar(setBtn, 0, 0, 12, 2); bar(setBtn, 0, 4, 12, 2)
 
-    closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = Status.Error[1] }); cx.TextColor3 = WHITE end)
+    closeBtn.MouseEnter:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = WHITE }); cx.TextColor3 = Color3.new(0, 0, 0) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, .15, { BackgroundColor3 = resolve("Element") }); cx.TextColor3 = resolve("SubText") end)
 
     makeDraggable(top, Main, function() return scale.Scale end)
@@ -1324,6 +1390,7 @@ function Nebula:CreateWindow(cfg)
 
     local side = create("Frame", { Size = UDim2.new(0, SIDE, 1, 0), BorderSizePixel = 0, Parent = Body })
     bind(side, "BackgroundColor3", "Side")
+    sheen(side, 90, 170)
 
     local search = create("TextBox", {
         Position = UDim2.fromOffset(8, 8), Size = UDim2.new(1, -16, 0, 26), BorderSizePixel = 0, Text = "",
@@ -1332,6 +1399,7 @@ function Nebula:CreateWindow(cfg)
     })
     bind(search, "BackgroundColor3", "Element"); bind(search, "TextColor3", "Text"); bind(search, "PlaceholderColor3", "SubText")
     corner(search, 8)
+    stroke(search, "Stroke", 1, 0.5)
     create("UIPadding", { PaddingLeft = UDim.new(0, 10), Parent = search })
 
     -- sliding highlight behind the active tab
@@ -1340,7 +1408,7 @@ function Nebula:CreateWindow(cfg)
         BorderSizePixel = 0, Visible = false, Parent = side,
     })
     corner(indicator, 8)
-    gradient(indicator, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(1, 0.6) }))
+    gradient(indicator, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0.96) }))
     local ipip = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.fromOffset(3, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = indicator })
     corner(ipip, 2)
 
@@ -1467,11 +1535,15 @@ function Nebula:CreateWindow(cfg)
         local orb = create("TextButton", {
             Name = "NebulaOrb", Position = UDim2.new(0, 14, .5, -22), Size = UDim2.fromOffset(44, 44),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false,
-            Text = (cfg.Title or "N"):sub(1, 1):upper(), TextColor3 = WHITE, TextSize = 20,
-            Font = Enum.Font.GothamBlack, ZIndex = 50, Parent = gui,
+            Text = "", ZIndex = 50, Parent = gui,
         })
         corner(orb, 22)
-        gradient(orb, "AccentGrad")
+        gradient(orb, "BtnGrad").Rotation = 90
+        create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 51,
+            Text = (cfg.Title or "N"):sub(1, 1):upper(), TextColor3 = WHITE, TextSize = 20,
+            Font = Enum.Font.GothamBlack, Parent = orb,
+        })
         local os_ = create("UIStroke", { Thickness = 1.5, Color = WHITE, Parent = orb })
         local og = gradient(os_, "GlowGrad")
         connect(RunService.Heartbeat, function() og.Rotation = (os.clock() * 90) % 360 end)
