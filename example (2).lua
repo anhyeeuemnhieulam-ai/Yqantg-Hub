@@ -10,7 +10,7 @@ local Nebula = loadstring(game:HttpGet("https://raw.githubusercontent.com/anhyee
 -- local Nebula = loadstring(readfile("Nebula/source.lua"))()
 
 local HUB_NAME = "Yqantg Hub"
-local HUB_LINK = "https://github.com/anhyeeuemnhieulam-ai/Yqantg-Hub"
+local HUB_LINK = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/Yqantg-Hub/refs/heads/main/source.lua"
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
