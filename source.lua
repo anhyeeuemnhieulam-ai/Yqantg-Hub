@@ -819,7 +819,12 @@ local function glowStroke(p, thick, speed, tr, opt)
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = p,
     })
     local g = gradient(s, "GlowGrad")
-    local h = animate(p, function(t) g.Rotation = (t * (speed or 60)) % 360 end, opt.gate)
+    local base = tr or 0
+    local h = animate(p, function(t)
+        g.Rotation = (t * (speed or 60)) % 360
+        -- opt.pulse = "breathing" glow (only for strokes whose Transparency is not tweened elsewhere)
+        if opt.pulse then s.Transparency = math.clamp(base + math.sin(t * 3.5) * 0.15, 0.02, 0.8) end
+    end, opt.gate)
     if opt.idle then h.entry.on = false end
     return s, g, h
 end
@@ -829,14 +834,14 @@ local function ripple(host, x, scaleObj, alpha)
     local s = scaleObj and scaleObj.Scale or 1
     local w, h = host.AbsoluteSize.X / s, host.AbsoluteSize.Y / s
     local rx = math.clamp((x - host.AbsolutePosition.X) / s, 0, w)
-    local d = math.max(w, h) * 2.2
+    local d = math.max(w, h) * 2.8
     local r = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, h / 2), Size = UDim2.fromOffset(0, 0),
-        BackgroundColor3 = WHITE, BackgroundTransparency = alpha or 0.82, BorderSizePixel = 0, ZIndex = 2, Parent = host,
+        BackgroundColor3 = WHITE, BackgroundTransparency = alpha or 0.75, BorderSizePixel = 0, ZIndex = 2, Parent = host,
     })
     corner(r, 500)
-    tween(r, 0.55, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
-    task.delay(0.6, function() r:Destroy() end)
+    tween(r, 0.5, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    task.delay(0.55, function() r:Destroy() end)
 end
 
 -- keep: "window" (top bar always reachable) | "full" (fully on-screen) | nil
@@ -901,6 +906,31 @@ function Yqantg:SetTheme(name)
         end
     end
     for _, fn in ipairs(self._refresh) do pcall(fn) end
+end
+
+-- rainbow accent: cycles the active theme's Accent (originals are restored when turned off)
+function Yqantg:ToggleRGBFlow(state)
+    if self._rgbConn then self._rgbConn:Disconnect(); self._rgbConn = nil end
+    local th = self.Themes[self.CurrentTheme]
+    if self._rgbSaved then
+        for name, c in pairs(self._rgbSaved) do if self.Themes[name] then self.Themes[name].Accent = c end end
+        self._rgbSaved = nil
+        self:SetTheme(self.CurrentTheme)
+    end
+    if not state or not th then return end
+    self._rgbSaved = { [self.CurrentTheme] = th.Accent }
+    local hue, acc = 0, 0
+    self._rgbConn = connect(RunService.Heartbeat, function(dt)
+        acc = acc + dt
+        if acc < 0.12 then return end          -- ~8 Hz: SetTheme re-tints every themed element
+        hue = (hue + acc * 0.12) % 1; acc = 0
+        local cur = self.Themes[self.CurrentTheme]
+        if cur then
+            if not self._rgbSaved[self.CurrentTheme] then self._rgbSaved[self.CurrentTheme] = cur.Accent end
+            cur.Accent = Color3.fromHSV(hue, 0.8, 1)
+            self:SetTheme(self.CurrentTheme)
+        end
+    end)
 end
 
 ----------------------------------------------------------------------
@@ -3238,7 +3268,44 @@ function Yqantg:CreateWindow(cfg)
     -- animated glow border
     local glow = create("UIStroke", { Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = WHITE, Parent = Main })
     local glowG = gradient(glow, "GlowGrad")
-    animate(Main, function(t) glowG.Rotation = (t * 45) % 360 end, vgate)
+    animate(Main, function(t)
+        glowG.Rotation = (t * 45) % 360
+        glow.Transparency = math.clamp(0.1 + math.sin(t * 3.5) * 0.15, 0, 0.5)   -- neon breathing
+    end, vgate)
+
+    -- space-dust particles behind the content (fewer on touch devices)
+    local dust
+    function Window:EnableDustParticles(state)
+        if state == false then
+            if dust then dust.holder:Destroy(); dust.h.Disconnect(); dust = nil end
+            return
+        end
+        if dust then return end
+        local holder = create("Frame", {
+            Name = "Dust", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+            ZIndex = 1, ClipsDescendants = true, Parent = Main,
+        })
+        local list = {}
+        for i = 1, UserInputService.TouchEnabled and 8 or 18 do
+            local sz = math.random(2, 5)
+            local f = create("Frame", {
+                Size = UDim2.fromOffset(sz, sz), BackgroundColor3 = WHITE,
+                BackgroundTransparency = math.random(35, 75) / 100, BorderSizePixel = 0,
+                Position = UDim2.fromScale(math.random(), math.random()), ZIndex = 1, Parent = holder,
+            })
+            corner(f, sz)
+            list[i] = { f = f, x = math.random(), y = math.random(), v = math.random(3, 10) / 1000, ph = math.random() * 6.28 }
+        end
+        local h = animate(holder, function(t)
+            for _, p in ipairs(list) do
+                p.y = p.y - p.v
+                if p.y < -0.02 then p.y = 1.02; p.x = math.random() end
+                p.f.Position = UDim2.fromScale(p.x + math.sin(t + p.ph) * 0.01, p.y)
+            end
+        end, vgate)
+        dust = { holder = holder, h = h }
+    end
+    if cfg.Dust then Window:EnableDustParticles() end
 
     ------------------------------------------------ topbar
     local top = create("Frame", { Size = UDim2.new(1, 0, 0, TOP), BorderSizePixel = 0, Parent = Main })
@@ -3251,7 +3318,7 @@ function Yqantg:CreateWindow(cfg)
     })
     bind(avatar, "BackgroundColor3", "Element")
     corner(avatar, 14)
-    glowStroke(avatar, 1.6, 120, 0, { gate = vgate })
+    glowStroke(avatar, 1.6, 120, 0.1, { gate = vgate, pulse = true })
     local title = text(top, cfg.Title or "Yqantg", 14, "Text", Enum.Font.GothamBold)
     title.Position = UDim2.fromOffset(46, 5); title.Size = UDim2.fromOffset(SIDE - 46, 16)
     local ttg = gradient(title, "TextGrad")
