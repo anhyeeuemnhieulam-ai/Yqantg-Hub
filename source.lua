@@ -36,6 +36,13 @@
       • Quieter borders + flatter sheen so content stands out; taller top bar with more breathing room
       • Tinted sidebar highlight with an accent pill, subtler section headers
 
+    NEW in 2.3 (compact layout)
+      • Tighter rhythm: 4px gaps between rows, single-line rows are 34px tall
+      • Toggle: switch on the left + live ON / OFF tag on the right
+      • Button: left-aligned label with a chevron, 34px tall
+      • Input: label left, field right on the same line (was stacked, 56px -> 34px)
+      • Slider / Range / Progress / Segment: shorter rows, same animations
+
     Usage: see example.lua
 ]]
 
@@ -1815,16 +1822,16 @@ end
 ---------------------------------------------------------------- Button (3D keycap)
 function Section:AddButton(o)
     local obj = { Type = "Button" }
-    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Parent = self.Body })
+    local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = self.Body })
     -- extruded base (the "side" of the key)
     local base = create("Frame", {
-        Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 34), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
+        Position = UDim2.fromOffset(0, 3), Size = UDim2.new(1, 0, 0, 31), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
     })
     bind(base, "BackgroundColor3", "Element")
     corner(base, 10)
     local baseGlow = stroke(base, "Stroke", 1, 0.35)
     local btn = create("TextButton", {
-        Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 31), BackgroundColor3 = WHITE, BorderSizePixel = 0,
         AutoButtonColor = false, Text = "", ClipsDescendants = true, ZIndex = 2, Parent = wrap,
     })
     corner(btn, 10)
@@ -1841,8 +1848,12 @@ function Section:AddButton(o)
     })
     local l = create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = o.Name or "Button",
-        TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 4, Parent = btn,
+        TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 4,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = btn,
     })
+    create("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = l })
+    local chev = drawIcon(btn, "right", { size = 10, color = WHITE, pos = UDim2.new(1, -14, .5, 0), thick = 1.6, z = 4 })
+    chev.GroupTransparency = 0.35
     local sc = self.Tab.Window._scaleObj
     local FACE = {
         rest  = UDim2.fromOffset(0, 0),
@@ -1881,7 +1892,7 @@ function Section:AddButton(o)
         local rx = (x - btn.AbsolutePosition.X) / s
         local d = (btn.AbsoluteSize.X / s) * 2.2
         local r = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, 17), Size = UDim2.fromOffset(0, 0),
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromOffset(rx, 15), Size = UDim2.fromOffset(0, 0),
             BackgroundColor3 = WHITE, BackgroundTransparency = 0.7, BorderSizePixel = 0, ZIndex = 3, Parent = btn,
         })
         corner(r, 400)
@@ -1906,40 +1917,45 @@ end
 ---------------------------------------------------------------- Toggle
 function Section:AddToggle(o)
     local obj = { Type = "Toggle", Value = o.Default == true }
-    local row = newRow(self, 36)
+    local row = newRow(self, 34)
     local l = text(row, o.Name or "Toggle", 13)
-    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(1, -64, 1, 0)
+    l.Position = UDim2.fromOffset(54, 0); l.Size = UDim2.new(1, -100, 1, 0)
 
     local track = create("Frame", {
-        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0),
-        Size = UDim2.fromOffset(40, 20), BorderSizePixel = 0, Parent = row,
+        AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 10, .5, 0),
+        Size = UDim2.fromOffset(34, 18), BorderSizePixel = 0, Parent = row,
     })
-    corner(track, 10)
+    corner(track, 9)
     gradient(track, "AccentGrad")
     local ts = stroke(track, "Stroke", 1, 0.2)
     local knob = create("Frame", {
         AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 3, .5, 0),
-        Size = UDim2.fromOffset(14, 14), BorderSizePixel = 0, Parent = track,
+        Size = UDim2.fromOffset(12, 12), BorderSizePixel = 0, Parent = track,
     })
-    corner(knob, 7)
+    corner(knob, 6)
     -- sphere shading + specular dot
     create("UIGradient", { Color = ColorSequence.new(WHITE, Color3.fromRGB(150, 150, 150)), Rotation = 90, Parent = knob })
     stroke(knob, "Bg", 1, 0.3)
     local spec = create("Frame", { Position = UDim2.fromOffset(3, 2), Size = UDim2.fromOffset(5, 3), BackgroundColor3 = WHITE, BackgroundTransparency = 0.5, BorderSizePixel = 0, Parent = knob })
     corner(spec, 2)
+    local tag = text(row, "", 10, "SubText", Enum.Font.GothamBold)
+    tag.AnchorPoint = Vector2.new(1, .5); tag.Position = UDim2.new(1, -10, .5, 0)
+    tag.Size = UDim2.fromOffset(34, 14); tag.TextXAlignment = Enum.TextXAlignment.Right
     local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", Parent = row })
 
     local function render(animate)
         local on = obj.Value
         tween(track, 0.25, { BackgroundColor3 = on and WHITE or resolve("Panel") })
         tween(ts, 0.25, { Transparency = on and 1 or 0.2 })
+        tag.Text = on and "ON" or "OFF"
+        tween(tag, 0.25, { TextColor3 = on and resolve("Accent") or resolve("SubText") })
         tween(knob, animate and 0.4 or 0, {
-            Position = on and UDim2.new(1, -17, .5, 0) or UDim2.new(0, 3, .5, 0),
+            Position = on and UDim2.new(1, -15, .5, 0) or UDim2.new(0, 3, .5, 0),
             BackgroundColor3 = on and Color3.fromRGB(10, 10, 12) or resolve("SubText"),
         }, Enum.EasingStyle.Back)
         if animate then
-            knob.Size = UDim2.fromOffset(20, 14)
-            tween(knob, 0.4, { Size = UDim2.fromOffset(14, 14) }, Enum.EasingStyle.Back)
+            knob.Size = UDim2.fromOffset(16, 12)
+            tween(knob, 0.4, { Size = UDim2.fromOffset(12, 12) }, Enum.EasingStyle.Back)
         end
     end
     onTheme(function() render(false) end)
@@ -1964,14 +1980,14 @@ function Section:AddSlider(o)
     local obj = { Type = "Slider", Value = math.clamp(o.Default or min, min, max) }
     local decimals = #((tostring(inc):match("%.(%d+)")) or "")
 
-    local row = newRow(self, 46)
+    local row = newRow(self, 42)
     local l = text(row, o.Name or "Slider", 13)
     l.Position = UDim2.fromOffset(10, 6); l.Size = UDim2.new(1, -90, 0, 16)
     local v = text(row, "", 12, "SubText", Enum.Font.GothamBold)
     v.AnchorPoint = Vector2.new(1, 0); v.Position = UDim2.new(1, -10, 0, 6)
     v.Size = UDim2.fromOffset(80, 16); v.TextXAlignment = Enum.TextXAlignment.Right
 
-    local track = create("Frame", { Position = UDim2.new(0, 10, 0, 31), Size = UDim2.new(1, -20, 0, 6), BorderSizePixel = 0, Parent = row })
+    local track = create("Frame", { Position = UDim2.new(0, 10, 0, 29), Size = UDim2.new(1, -20, 0, 5), BorderSizePixel = 0, Parent = row })
     bind(track, "BackgroundColor3", "Panel")
     corner(track, 3)
     local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track })
@@ -1989,7 +2005,7 @@ function Section:AddSlider(o)
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.85, BorderSizePixel = 0, Parent = knob,
     })
     corner(halo, 100)
-    local hit = create("TextButton", { BackgroundTransparency = 1, Text = "", Position = UDim2.fromOffset(0, 22), Size = UDim2.new(1, 0, 0, 24), Parent = row })
+    local hit = create("TextButton", { BackgroundTransparency = 1, Text = "", Position = UDim2.fromOffset(0, 20), Size = UDim2.new(1, 0, 0, 22), Parent = row })
 
     local function fmt(x)
         if decimals > 0 then return string.format("%." .. decimals .. "f", x) end
@@ -2051,12 +2067,12 @@ end
 ---------------------------------------------------------------- Input
 function Section:AddInput(o)
     local obj = { Type = "Input", Value = o.Default or "" }
-    local row = newRow(self, 56)
+    local row = newRow(self, 34)
     local l = text(row, o.Name or "Input", 13)
-    l.Position = UDim2.fromOffset(10, 5); l.Size = UDim2.new(1, -20, 0, 16)
+    l.Position = UDim2.fromOffset(10, 0); l.Size = UDim2.new(0.4, -10, 1, 0)
 
     local box = create("TextBox", {
-        Position = UDim2.fromOffset(10, 25), Size = UDim2.new(1, -20, 0, 24), BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -6, .5, 0), Size = UDim2.new(0.58, 0, 0, 24), BorderSizePixel = 0,
         Text = obj.Value, PlaceholderText = o.Placeholder or "Type here...", TextSize = 12,
         Font = Enum.Font.Gotham, ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
     })
@@ -2341,14 +2357,14 @@ function Section:AddProgress(o)
     o = o or {}
     local min, max = o.Min or 0, o.Max or 100
     local obj = { Type = "Progress", Value = math.clamp(o.Default or min, min, max) }
-    local row = newRow(self, 44)
+    local row = newRow(self, 40)
     local l = text(row, o.Name or "Progress", 13)
     l.Position = UDim2.fromOffset(10, 6); l.Size = UDim2.new(1, -90, 0, 16)
     local v = text(row, "", 12, "SubText", Enum.Font.GothamBold)
     v.AnchorPoint = Vector2.new(1, 0); v.Position = UDim2.new(1, -10, 0, 6)
     v.Size = UDim2.fromOffset(80, 16); v.TextXAlignment = Enum.TextXAlignment.Right
 
-    local track = create("Frame", { Position = UDim2.new(0, 10, 0, 29), Size = UDim2.new(1, -20, 0, 8), BorderSizePixel = 0, Parent = row })
+    local track = create("Frame", { Position = UDim2.new(0, 10, 0, 27), Size = UDim2.new(1, -20, 0, 8), BorderSizePixel = 0, Parent = row })
     bind(track, "BackgroundColor3", "Panel")
     corner(track, 4)
     local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ClipsDescendants = true, Parent = track })
@@ -2384,11 +2400,11 @@ function Section:AddSegment(o)
     o = o or {}
     local opts = o.Options or {}
     local obj = { Type = "Segment", Value = o.Default or opts[1] }
-    local row = newRow(self, 62)
+    local row = newRow(self, 58)
     local l = text(row, o.Name or "Segment", 13)
-    l.Position = UDim2.fromOffset(10, 5); l.Size = UDim2.new(1, -20, 0, 16)
+    l.Position = UDim2.fromOffset(10, 4); l.Size = UDim2.new(1, -20, 0, 16)
 
-    local bar = create("Frame", { Position = UDim2.fromOffset(10, 27), Size = UDim2.new(1, -20, 0, 28), BorderSizePixel = 0, Parent = row })
+    local bar = create("Frame", { Position = UDim2.fromOffset(10, 24), Size = UDim2.new(1, -20, 0, 27), BorderSizePixel = 0, Parent = row })
     bind(bar, "BackgroundColor3", "Panel")
     corner(bar, 8)
     local n = math.max(#opts, 1)
@@ -2592,7 +2608,7 @@ function Section:AddRangeSlider(o)
     local b = math.clamp(o.DefaultMax or hi, lo, hi)
     local obj = { Type = "RangeSlider", Value = { Min = a, Max = b } }
 
-    local row = newRow(self, 46)
+    local row = newRow(self, 42)
     local l = text(row, o.Name or "Range", 13)
     l.Position = UDim2.fromOffset(10, 6); l.Size = UDim2.new(1, -120, 0, 16)
     local vl = text(row, "", 12, "SubText", Enum.Font.GothamBold)
@@ -2600,7 +2616,7 @@ function Section:AddRangeSlider(o)
     vl.Size = UDim2.fromOffset(110, 16); vl.TextXAlignment = Enum.TextXAlignment.Right
 
     local hit = create("TextButton", {
-        Position = UDim2.fromOffset(10, 24), Size = UDim2.new(1, -20, 0, 20),
+        Position = UDim2.fromOffset(10, 21), Size = UDim2.new(1, -20, 0, 20),
         BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = row,
     })
     local track = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.new(1, 0, 0, 6), BorderSizePixel = 0, Parent = hit })
@@ -3301,7 +3317,7 @@ function Tab:AddSection(o)
     self._secs[#self._secs + 1] = fscale
     sec.Frame = frame
     local pad = create("UIPadding", { PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7), PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = frame })
-    create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
+    create("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
     if o.NoHeader then
         frame.BackgroundTransparency = 1
         fst:Destroy()
@@ -3336,7 +3352,7 @@ function Tab:AddSection(o)
     end
 
     local body = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2, Parent = frame })
-    local layout = create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = body })
+    local layout = create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = body })
     sec.Body = body
 
     -- smooth collapse / expand
