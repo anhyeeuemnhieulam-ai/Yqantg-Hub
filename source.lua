@@ -43,6 +43,12 @@
       • Input: label left, field right on the same line (was stacked, 56px -> 34px)
       • Slider / Range / Progress / Segment: shorter rows, same animations
 
+    NEW in 2.4 (responsive tab layout)
+      • Tabs auto-switch between 1 column (narrow window / phone) and 2 columns (wide window),
+        so labels and values are never cut off. Resize the window and it re-flows live.
+      • Force it per tab:  Window:AddTab({ Name = "Main", Columns = 1 | 2 })
+      • Section headers show an item-count badge
+
     Usage: see example.lua
 ]]
 
@@ -3315,6 +3321,8 @@ function Tab:AddSection(o)
     local fscale = create("UIScale", { Parent = frame })
     self._secs = self._secs or {}
     self._secs[#self._secs + 1] = fscale
+    self._sections = self._sections or {}
+    if o.Side ~= "Full" then self._sections[#self._sections + 1] = { frame = frame, right = (col == self.Right) } end
     sec.Frame = frame
     local pad = create("UIPadding", { PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7), PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = frame })
     create("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
@@ -3335,7 +3343,7 @@ function Tab:AddSection(o)
         local pip = create("Frame", { Position = UDim2.fromOffset(8, 7), Size = UDim2.fromOffset(3, 14), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = head })
         corner(pip, 2)
         tl = create("TextLabel", {
-            BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 0), Size = UDim2.new(1, -40, 1, 0),
+            BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 0), Size = UDim2.new(1, -74, 1, 0),
             Text = o.Name or "Section", TextColor3 = WHITE, TextSize = 12, Font = Enum.Font.GothamBold,
             TextXAlignment = Enum.TextXAlignment.Left, Parent = head,
         })
@@ -3354,6 +3362,22 @@ function Tab:AddSection(o)
     local body = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2, Parent = frame })
     local layout = create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = body })
     sec.Body = body
+    if head then
+        local n = 0
+        local badge = create("Frame", {
+            AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -36, .5, 0), Size = UDim2.fromOffset(22, 16),
+            BackgroundTransparency = 0.82, BorderSizePixel = 0, Visible = false, ZIndex = 3, Parent = head,
+        })
+        bind(badge, "BackgroundColor3", "Accent")
+        corner(badge, 8)
+        local cnt = text(badge, "0", 10, "Accent", Enum.Font.GothamBold)
+        cnt.Size = UDim2.fromScale(1, 1); cnt.TextXAlignment = Enum.TextXAlignment.Center; cnt.ZIndex = 4
+        body.ChildAdded:Connect(function(c)
+            if c:IsA("GuiObject") and c.Size.Y.Offset ~= 1 then
+                n = n + 1; cnt.Text = tostring(n); badge.Visible = true
+            end
+        end)
+    end
 
     -- smooth collapse / expand
     local open = o.Collapsed ~= true
@@ -3401,6 +3425,7 @@ function Tab:AddSection(o)
         head.MouseButton1Click:Connect(function() open = not open; apply(true) end)
     end
     apply(false)
+    if self._relayout then self._relayout(true) end
 
     function sec:SetName(str) if tl then tl.Text = str end end
     function sec:Toggle(state) if state == nil then state = not open end; open = state; apply(true) end
@@ -4607,6 +4632,34 @@ function Yqantg:CreateWindow(cfg)
         tab._fitUpdate = fitUpdate
         page:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(fitUpdate)
         page:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(fitUpdate)
+
+        -- responsive columns: 1 column when narrow, 2 when wide (hysteresis stops flicker at the edge)
+        tab.Columns = o.Columns
+        local stacked
+        local function relayout(force)
+            local w = page.AbsoluteSize.X / math.max(scale.Scale, 0.01)
+            local want = stacked
+            if tab.Columns == 1 then want = true
+            elseif tab.Columns == 2 then want = false
+            elseif w > 1 then
+                if stacked == nil then want = w < 515
+                elseif stacked then want = w < 530
+                else want = w < 500 end
+            end
+            if want == nil then return end
+            if want == stacked and not force then return end
+            stacked = want
+            for _, r in ipairs(tab._sections or {}) do
+                if r.frame.Parent then
+                    r.frame.Parent = stacked and tab.Left or (r.right and tab.Right or tab.Left)
+                end
+            end
+            tab.Left.Size = stacked and UDim2.new(1, 0, 0, 0) or UDim2.new(0.5, -4, 0, 0)
+            tab.Right.Visible = not stacked
+        end
+        tab._relayout = relayout
+        page:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() relayout(false) end)
+        relayout(false)
 
         b.MouseButton1Click:Connect(function()
             if tab.Locked then
