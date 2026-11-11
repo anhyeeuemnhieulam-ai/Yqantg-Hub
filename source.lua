@@ -3391,14 +3391,44 @@ function Yqantg:CreateWindow(cfg)
     corner(bgImg, 12)
     local mainSheen = sheen(Main, 65, 150)
 
+    -- back face of the card: shown while the window turns edge-on during open / close
+    do
+        local t = cfg.Title or "Y"
+        local ch = t:sub(1, (utf8.offset(t, 2) or (#t + 1)) - 1):upper()
+        F.cover = create("Frame", { Name = "FlipCover", Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 100, Visible = false, Parent = Main })
+        bind(F.cover, "BackgroundColor3", "Bg")
+        corner(F.cover, 12)
+        F.coverG = create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(105, 105, 115)), Parent = F.cover })
+        F.coverTxt = create("TextLabel", {
+            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = ch ~= "" and ch or "Y",
+            TextSize = 90, Font = Enum.Font.GothamBlack, ZIndex = 101, Parent = F.cover,
+        })
+        bind(F.coverTxt, "TextColor3", "Accent")
+        F.coverShine = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(0, .5), Size = UDim2.new(0, 70, 1.8, 0),
+            Rotation = 16, BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 102, Parent = F.cover,
+        })
+        create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.55), NumberSequenceKeypoint.new(1, 1) }), Parent = F.coverShine })
+        -- shading: the face darkens as it turns away from the viewer (both faces)
+        F.shade = create("Frame", { Name = "FlipShade", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 110, Visible = false, Parent = Main })
+        corner(F.shade, 12)
+    end
+
     -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
     local introV = create("NumberValue", { Value = 1, Parent = Root })
     local liftV  = create("NumberValue", { Value = 0, Parent = Root })
+    -- F = 3D flip state (kept in one table to stay under Lua's 200-locals limit)
+    local F = {
+        side = 1, on = false,
+        flipV = create("NumberValue", { Value = 1, Parent = Root }),   -- 0 = card edge-on, 1 = fully open
+        levV  = create("NumberValue", { Value = 0, Parent = Root }),   -- levitation while minimized
+    }
     local par = { x = 0, y = 0 }
     local function applyDepth()
-        local k, f, lf = Yqantg.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value
-        slab.Position  = UDim2.fromOffset(-par.x * 5 * k, (7 + lf) * k * f)
-        slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k, (13 + lf * 1.8) * k * f)
+        local k, f, lf = Yqantg.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value + F.levV.Value
+        local fx = (F.th or 0) * 18 * F.side                 -- thickness peeks out of the receding edge
+        slab.Position  = UDim2.fromOffset(-par.x * 5 * k + fx * 0.5, (7 + lf) * k * f)
+        slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k + fx, (13 + lf * 1.8) * k * f)
         slab.BackgroundTransparency  = math.clamp(1 - f, 0, 1)
         slab2.BackgroundTransparency = math.clamp(1 - f * 0.6, 0, 1)
         shNear.Position = UDim2.new(.5, -par.x * 8 * k, .5, (5 + lf * 0.6 - par.y * 4) * k)
@@ -4205,33 +4235,94 @@ function Yqantg:CreateWindow(cfg)
     local restPos
     local tok = 0
 
+    -- 3D card flip: the window turns about its vertical axis (width -> edge-on), grows a little
+    -- while turned (perspective), shows a shaded back face with a travelling shine, and its
+    -- slab layers peek out of the receding edge. Driven entirely by F.flipV.
+    F.apply = function()
+        -- p: 0..1 -> angle: pi (back face, full width) .. 0 (front face, full width); pi/2 = edge-on
+        local p = F.flipV.Value
+        local th = (1 - p) * math.pi
+        local sn = math.sin(th)
+        local w = math.abs(math.cos(th))
+        local ww = 0.02 + 0.98 * w
+        F.th = sn
+        local bs = Window.Minimized and UDim2.fromOffset(fs.X.Offset, TOP) or fs
+        Root.Size = UDim2.new(bs.X.Scale * ww, bs.X.Offset * ww, bs.Y.Scale, bs.Y.Offset)
+        local r = F.rest
+        Root.Position = UDim2.new(r.X.Scale, r.X.Offset, r.Y.Scale, r.Y.Offset - sn * 14)
+        Root.Rotation = F.side * sn * 4
+        scale.Scale = Window._scale * (1 + sn * 0.14)               -- perspective: nearer while turning
+        local back = th > math.pi / 2
+        F.cover.Visible = back
+        F.cover.BackgroundTransparency = 0
+        F.coverTxt.TextTransparency = 0
+        F.coverShine.Position = UDim2.new(1 - w, 0, .5, 0)
+        F.coverG.Rotation = F.side > 0 and 0 or 180
+        F.shade.Visible = sn > 0.02
+        F.shade.BackgroundTransparency = 1 - 0.5 * sn
+    end
+    F.flipV.Changed:Connect(function() if F.on then F.apply() end end)
+
+    -- expanding light ring behind the window (landing impact)
+    F.shock = function(th)
+        local r = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1, ZIndex = 0, Parent = Root,
+        })
+        corner(r, 14)
+        local st = create("UIStroke", { Thickness = th or 2.5, Color = WHITE, Transparency = 0.15, Parent = r })
+        gradient(st, "GlowGrad")
+        tween(r, 0.75, { Size = UDim2.new(1, 110, 1, 80) }, Enum.EasingStyle.Quint)
+        tween(st, 0.75, { Transparency = 1 })
+        task.delay(0.8, function() r:Destroy() end)
+    end
+    local function baseSize() return Window.Minimized and UDim2.fromOffset(fs.X.Offset, TOP) or fs end
+
     local function intro()
         tok = tok + 1
         local my = tok
+        if not F.on then restPos = Root.Position end
         restPos = restPos or Root.Position
+        F.rest = restPos
+        F.side = 1
+        local fresh = not F.on
+        F.on = true
         Root.Visible = true
-        -- start state: low, tilted, small, transparent, stack collapsed
-        Root.Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 22)
-        Root.Rotation = 0
-        scale.Scale = Window._scale * 0.93
-        Main.GroupTransparency = 1
-        introV.Value = 0
-        glow.Thickness = 0.5
-        for _, p in ipairs(popItems) do p.Scale = 0 end
-        title.TextTransparency = 1; subtitle.TextTransparency = 1
-        -- fly in
-        tween(Main, 0.4, { GroupTransparency = 0 }, Enum.EasingStyle.Sine)
-        tween(scale, 0.65, { Scale = Window._scale }, Enum.EasingStyle.Quint)
-        tween(Root, 0.65, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Quint)
-        tween(introV, 0.8, { Value = 1 }, Enum.EasingStyle.Quint)
-        tween(glow, 0.8, { Thickness = 2 })
+        Main.GroupTransparency = 0
+        if fresh then
+            F.flipV.Value = 0                 -- starts edge-on (apply runs through Changed)
+            introV.Value = 0
+            glow.Thickness = 0.5
+            for _, p in ipairs(popItems) do p.Scale = 0 end
+            title.TextTransparency = 1; subtitle.TextTransparency = 1
+        end
+        Main.GroupTransparency = fresh and 1 or Main.GroupTransparency
+        tween(Main, 0.25, { GroupTransparency = 0 }, Enum.EasingStyle.Sine)
+        tween(F.flipV, 1.0, { Value = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+        task.delay(0.2, function() if my == tok then tween(introV, 0.7, { Value = 1 }, Enum.EasingStyle.Quint) end end)
+        tween(glow, 0.9, { Thickness = 2 })
         Yqantg:_syncBlur()
         Yqantg:_sfx("Open")
-        -- staggered pop-in of top bar / tabs / sections
+        -- landing: slabs slam down, light ring bursts out
+        task.delay(0.86, function()
+            if my ~= tok then return end
+            liftV.Value = 14
+            tween(liftV, 0.7, { Value = 0 }, Enum.EasingStyle.Quint)
+            F.shock(2.5)
+        end)
+        task.delay(1.05, function()
+            if my ~= tok then return end
+            F.on = false
+            F.th = 0
+            Root.Size = baseSize(); Root.Position = restPos; Root.Rotation = 0
+            scale.Scale = Window._scale
+            F.cover.Visible = false; F.shade.Visible = false
+        end)
+        -- staggered pop-in of top bar / tabs / sections once the face is turned
         for i, p in ipairs(popItems) do
-            task.delay(0.1 + i * 0.045, function() if my == tok then tween(p, 0.55, { Scale = 1 }, Enum.EasingStyle.Quint) end end)
+            task.delay(0.5 + i * 0.045, function() if my == tok then tween(p, 0.55, { Scale = 1 }, Enum.EasingStyle.Quint) end end)
         end
-        task.delay(0.3, function()
+        task.delay(0.65, function()
             if my == tok then
                 tween(title, 0.4, { TextTransparency = 0 }); tween(subtitle, 0.5, { TextTransparency = 0 })
             end
@@ -4241,11 +4332,11 @@ function Yqantg:CreateWindow(cfg)
             if my ~= tok then return end
             for i, t in ipairs(Window.Tabs) do
                 t.Label.TextTransparency = 1
-                task.delay(0.2 + i * 0.045, function()
+                task.delay(0.6 + i * 0.045, function()
                     if my == tok and t.Label.Parent then tween(t.Label, 0.4, { TextTransparency = 0 }) end
                 end)
             end
-            if Window.ActiveTab then Window.ActiveTab:_cascade(0.18) end
+            if Window.ActiveTab then Window.ActiveTab:_cascade(0.55) end
         end)
     end
 
@@ -4253,24 +4344,32 @@ function Yqantg:CreateWindow(cfg)
         Yqantg:_lock("hover" .. tostring(Window), false)
         tok = tok + 1
         local my = tok
-        restPos = Root.Position
+        if not F.on then restPos = Root.Position end
+        F.rest = restPos
+        F.side = -1
+        F.on = true
         setPanel(false)
-        tween(Main, 0.3, { GroupTransparency = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-        tween(scale, 0.34, { Scale = Window._scale * 0.94 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        tween(Root, 0.34, {
-            Rotation = 0,
-            Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 18),
-        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        tween(introV, 0.3, { Value = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-        tween(glow, 0.3, { Thickness = 0.5 })
+        tween(F.flipV, 0.8, { Value = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+        task.delay(0.55, function()
+            if my == tok then
+                tween(introV, 0.3, { Value = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+                tween(Main, 0.25, { GroupTransparency = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+            end
+        end)
+        tween(glow, 0.4, { Thickness = 0.5 })
         Yqantg:_syncBlur()
         Yqantg:_sfx("Close")
-        task.delay(0.36, function()
+        task.delay(0.86, function()
             if my ~= tok then return end
             Root.Visible = false
-            Root.Rotation = 0
-            Root.Position = restPos
+            F.on = false
+            F.th = 0
+            Main.GroupTransparency = 0
+            F.flipV.Value = 1
+            Root.Size = baseSize(); Root.Position = restPos; Root.Rotation = 0
             scale.Scale = Window._scale
+            F.cover.Visible = false; F.shade.Visible = false
+            liftV.Value = 0
         end)
     end
 
@@ -4281,12 +4380,13 @@ function Yqantg:CreateWindow(cfg)
         if state then intro() else outro() end
     end
 
-    -- minimize: collapses to a floating top bar (bobs in the air, drag it anywhere);
-    -- restore: the window flies back to the exact spot it had before minimizing
+    -- minimize: the card lifts off, folds down to its title bar and hovers (levitates, shadow
+    -- breathing, drag it anywhere); restore: it unfolds back to the exact spot and slams down
     local savedPos
     animate(Main, function(t)
         Main.Position = UDim2.fromOffset(0, math.sin(t * 2.2) * 3)
         Main.Rotation = math.sin(t * 1.6) * 1.4
+        F.levV.Value = 6 + math.sin(t * 2.2) * 3
     end, function() return Window.Minimized end)
 
     function Window:Minimize()
@@ -4295,29 +4395,44 @@ function Yqantg:CreateWindow(cfg)
         setPanel(false)
         Yqantg:_sfx("Click")
         grip.Visible = not Window.Minimized
+        F.mtok = (F.mtok or 0) + 1
+        local my = F.mtok
         if Window.Minimized then
             savedPos = Root.Position
-            tween(liftV, 0.25, { Value = 12 })
-            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Quint) end)
-            tween(Body, 0.2, { GroupTransparency = 1 })
-            task.delay(0.12, function()
-                if Window.Minimized then
-                    tween(Root, 0.5, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Quint)
+            tween(liftV, 0.3, { Value = 18 }, Enum.EasingStyle.Cubic)
+            tween(glow, 0.25, { Thickness = 4 })
+            tween(Body, 0.22, { GroupTransparency = 1 })
+            task.delay(0.16, function()
+                if my == F.mtok then
+                    tween(Root, 0.5, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut)
                 end
             end)
-            task.delay(0.2, function() if Window.Minimized then Body.Visible = false end end)
+            task.delay(0.22, function() if my == F.mtok and Window.Minimized then Body.Visible = false end end)
+            task.delay(0.6, function()
+                if my == F.mtok and Window.Minimized then
+                    tween(liftV, 0.5, { Value = 0 }, Enum.EasingStyle.Sine)
+                    tween(glow, 0.4, { Thickness = 2 })
+                end
+            end)
         else
             Body.Visible = true
             Root.Rotation = 0
+            tween(F.levV, 0.4, { Value = 0 }, Enum.EasingStyle.Quad)
             tween(Main, 0.4, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Quad)
-            tween(liftV, 0.25, { Value = 14 })
-            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Quint) end)
-            -- float back to the old place while growing back to full size
-            tween(Root, 0.65, { Size = fs, Position = savedPos or Root.Position, Rotation = 0 }, Enum.EasingStyle.Quint)
+            tween(liftV, 0.3, { Value = 22 }, Enum.EasingStyle.Cubic)
+            tween(glow, 0.3, { Thickness = 4 })
+            tween(Root, 0.6, { Size = fs, Position = savedPos or Root.Position, Rotation = 0 }, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
             task.delay(0.3, function()
-                if not Window.Minimized then
+                if my == F.mtok and not Window.Minimized then
                     tween(Body, 0.35, { GroupTransparency = 0 })
                     if Window.ActiveTab then Window.ActiveTab:_cascade(0) end
+                end
+            end)
+            task.delay(0.58, function()
+                if my == F.mtok and not Window.Minimized then
+                    tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Quint)   -- slam
+                    tween(glow, 0.5, { Thickness = 2 })
+                    F.shock(2.5)
                 end
             end)
         end
@@ -4328,7 +4443,7 @@ function Yqantg:CreateWindow(cfg)
         Window._closing = true
         Window.Visible = false
         outro()
-        task.delay(0.5, function() Window:Destroy() end)
+        task.delay(0.95, function() Window:Destroy() end)
     end
 
     function Window:Destroy()
@@ -4432,11 +4547,17 @@ function Yqantg:CreateWindow(cfg)
         local moved = 0
         makeDraggable(orb, orb, nil, function(d) moved = math.max(moved, math.abs(d.X) + math.abs(d.Y)) end, "full")
         orb.InputBegan:Connect(function(i) if isPress(i) then moved = 0 end end)
-        local spinT = 0
         orb.MouseButton1Click:Connect(function()
             if moved < 8 then
-                spinT = spinT + 360
-                tween(orb, 0.7, { Rotation = spinT }, Enum.EasingStyle.Back)
+                -- coin flip: the orb turns edge-on and back, then the window flips
+                local base, w = orb.Position, orb.Size.X.Offset
+                tween(orb, 0.18, {
+                    Size = UDim2.fromOffset(4, orb.Size.Y.Offset),
+                    Position = UDim2.new(base.X.Scale, base.X.Offset + (w - 4) / 2, base.Y.Scale, base.Y.Offset),
+                }, Enum.EasingStyle.Cubic, Enum.EasingDirection.In)
+                task.delay(0.18, function()
+                    if orb.Parent then tween(orb, 0.4, { Size = UDim2.fromOffset(w, orb.Size.Y.Offset), Position = base }, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out) end
+                end)
                 Window:Toggle()
             end
         end)
