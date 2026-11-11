@@ -2709,54 +2709,69 @@ function Section:AddConsole(o)
     return obj
 end
 
+---------------------------------------------------------------- Info cards: compact + stacked + no scroll
+-- An "info" tab (profile / owner / YouTube / Discord / stats / overview) is stacked in ONE column and
+-- fitted to the window so everything is visible without scrolling. The scrollbar only comes back
+-- if the content is still taller than the window (tiny window / many extra elements).
+-- Opt out / force with Window:AddTab({ Name = "Main", Fit = false | true }).
+local function markInfo(sec)
+    local tab = sec.Tab
+    if not tab or tab.Fit == false then return end
+    if tab.Fit == nil then tab._info = true end
+    if sec.Frame and tab.Full and sec.Frame.Parent ~= tab.Full then
+        sec.Frame.Parent = tab.Full
+        tab.FullPad.PaddingBottom = UDim.new(0, 8)
+    end
+    if tab._fitUpdate then tab._fitUpdate() end
+end
+
 ---------------------------------------------------------------- Profile card
 function Section:AddProfile()
-    local row = newRow(self, 92)
+    markInfo(self)
+    local row = newRow(self, 52)
 
     local av = create("ImageLabel", {
-        Position = UDim2.fromOffset(12, 14), Size = UDim2.fromOffset(64, 64), BorderSizePixel = 0,
+        Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(36, 36), BorderSizePixel = 0,
         Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150", Parent = row,
     })
     bind(av, "BackgroundColor3", "Panel")
-    corner(av, 32)
-    local ring = create("UIStroke", { Thickness = 2.5, Color = WHITE, Parent = av })
+    corner(av, 18)
+    local ring = create("UIStroke", { Thickness = 2, Color = WHITE, Parent = av })
     local ringG = gradient(ring, "GlowGrad")
     animate(ring, function(t) ringG.Rotation = (t * 80) % 360 end, gateOf(self))
 
-    local dot = create("Frame", { Position = UDim2.fromOffset(60, 60), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = Status.Success[1], BorderSizePixel = 0, ZIndex = 3, Parent = row })
-    corner(dot, 6)
+    local dot = create("Frame", { Position = UDim2.fromOffset(37, 37), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Status.Success[1], BorderSizePixel = 0, ZIndex = 3, Parent = row })
+    corner(dot, 5)
     stroke(dot, "Element", 2, 0)
     TweenService:Create(dot, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = 0.45 }):Play()
 
-    local tag = text(row, "WELCOME BACK", 9, "Accent", Enum.Font.GothamBold)
-    tag.Position = UDim2.fromOffset(90, 12); tag.Size = UDim2.new(1, -200, 0, 12)
-    local nm = text(row, LocalPlayer.DisplayName, 18, "Text", Enum.Font.GothamBold)
-    nm.Position = UDim2.fromOffset(90, 24); nm.Size = UDim2.new(1, -200, 0, 22)
-    local un = text(row, "@" .. LocalPlayer.Name, 11, "SubText", Enum.Font.Gotham)
-    un.Position = UDim2.fromOffset(90, 46); un.Size = UDim2.new(1, -200, 0, 14)
+    local tag = text(row, "WELCOME BACK", 8, "Accent", Enum.Font.GothamBold)
+    tag.Position = UDim2.fromOffset(58, 6); tag.Size = UDim2.new(1, -254, 0, 10)
+    local nm = text(row, LocalPlayer.DisplayName, 15, "Text", Enum.Font.GothamBold)
+    nm.Position = UDim2.fromOffset(58, 15); nm.Size = UDim2.new(1, -254, 0, 18)
+    local un = text(row, "@" .. LocalPlayer.Name, 10, "SubText", Enum.Font.Gotham)
+    un.Position = UDim2.fromOffset(58, 33); un.Size = UDim2.new(1, -254, 0, 12)
 
-    local function pill(x, str, w)
-        local p = create("Frame", { Position = UDim2.fromOffset(x, 66), Size = UDim2.fromOffset(w, 18), BorderSizePixel = 0, Parent = row })
+    local function pill(y, str)
+        local p = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -80, 0, y), Size = UDim2.fromOffset(104, 18), BorderSizePixel = 0, Parent = row })
         bind(p, "BackgroundColor3", "Panel")
         corner(p, 9)
         stroke(p, "Stroke", 1, 0.3)
         local t = text(p, str, 10, "SubText", Enum.Font.GothamBold)
         t.Size = UDim2.fromScale(1, 1); t.TextXAlignment = Enum.TextXAlignment.Center
     end
-    pill(90, "ID " .. LocalPlayer.UserId, 112)
-    pill(208, LocalPlayer.AccountAge .. " days old", 74)
+    pill(7, "ID " .. LocalPlayer.UserId)
+    pill(27, LocalPlayer.AccountAge .. " days old")
 
-    local box = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 14), Size = UDim2.fromOffset(84, 64), BorderSizePixel = 0, Parent = row })
+    local box = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 6), Size = UDim2.fromOffset(64, 40), BorderSizePixel = 0, Parent = row })
     bind(box, "BackgroundColor3", "Panel")
     corner(box, 10)
     stroke(box, "Accent", 1, 0.55)
-    local pt = text(box, "PLAYERS", 9, "SubText", Enum.Font.GothamBold)
-    pt.Size = UDim2.new(1, 0, 0, 14); pt.Position = UDim2.fromOffset(0, 7); pt.TextXAlignment = Enum.TextXAlignment.Center
-    local pn = text(box, "", 24, "Text", Enum.Font.GothamBlack)
-    pn.Size = UDim2.new(1, 0, 0, 28); pn.Position = UDim2.fromOffset(0, 19); pn.TextXAlignment = Enum.TextXAlignment.Center
-    local pm = text(box, "of " .. Players.MaxPlayers .. " max", 9, "SubText", Enum.Font.Gotham)
-    pm.Size = UDim2.new(1, 0, 0, 12); pm.Position = UDim2.fromOffset(0, 48); pm.TextXAlignment = Enum.TextXAlignment.Center
-    local function upd() pn.Text = tostring(#Players:GetPlayers()) end
+    local pt = text(box, "PLAYERS", 8, "SubText", Enum.Font.GothamBold)
+    pt.Size = UDim2.new(1, 0, 0, 10); pt.Position = UDim2.fromOffset(0, 5); pt.TextXAlignment = Enum.TextXAlignment.Center
+    local pn = text(box, "", 16, "Text", Enum.Font.GothamBlack)
+    pn.Size = UDim2.new(1, 0, 0, 20); pn.Position = UDim2.fromOffset(0, 16); pn.TextXAlignment = Enum.TextXAlignment.Center
+    local function upd() pn.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers end
     upd()
     connect(Players.PlayerAdded, upd)
     connect(Players.PlayerRemoving, function() task.defer(upd) end)
@@ -2766,39 +2781,40 @@ end
 ---------------------------------------------------------------- Owner card
 function Section:AddOwner(o)
     o = o or {}
-    local row = newRow(self, 80)
+    markInfo(self)
+    local row = newRow(self, 46)
 
-    local icon = create("Frame", { Position = UDim2.fromOffset(12, 14), Size = UDim2.fromOffset(52, 52), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = row })
-    corner(icon, 14)
+    local icon = create("Frame", { Position = UDim2.fromOffset(10, 7), Size = UDim2.fromOffset(32, 32), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = row })
+    corner(icon, 10)
     local ig = gradient(icon, "AccentGrad")
     ig.Rotation = 45
     create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = (o.Name or "Y"):sub(1, 1):upper(),
-        TextColor3 = Color3.new(0, 0, 0), TextSize = 28, Font = Enum.Font.GothamBlack, Parent = icon,
+        TextColor3 = Color3.new(0, 0, 0), TextSize = 19, Font = Enum.Font.GothamBlack, Parent = icon,
     })
     animate(icon, function(t) ig.Rotation = 45 + math.sin(t * 1.5) * 40 end, gateOf(self))
 
-    local tag = text(row, "UI LIBRARY OWNER", 9, "SubText", Enum.Font.GothamBold)
-    tag.Position = UDim2.fromOffset(76, 11); tag.Size = UDim2.new(1, -190, 0, 12)
+    local tag = text(row, "UI LIBRARY OWNER", 8, "SubText", Enum.Font.GothamBold)
+    tag.Position = UDim2.fromOffset(54, 4); tag.Size = UDim2.new(1, -170, 0, 10)
 
     local name = create("TextLabel", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(76, 23), Size = UDim2.new(1, -190, 0, 26),
-        Text = o.Name or "Yqantg Hub", TextColor3 = WHITE, TextSize = 21, Font = Enum.Font.GothamBlack,
-        TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 13), Size = UDim2.new(1, -170, 0, 20),
+        Text = o.Name or "Yqantg Hub", TextColor3 = WHITE, TextSize = 16, Font = Enum.Font.GothamBlack,
+        TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
     local ng = create("UIGradient", { Parent = name })
     bind(ng, "Color", "TextGrad")
     animate(name, function(t) ng.Offset = Vector2.new(math.sin(t * 1.3) * 0.65, 0) end, gateOf(self))
 
-    drawIcon(row, "check", { size = 11, color = Status.Success[1], anchor = Vector2.new(0, .5), pos = UDim2.fromOffset(76, 59), thick = 1.8 })
-    local badge = create("TextLabel", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(92, 52), Size = UDim2.new(1, -206, 0, 14),
-        Text = "Verified  ·  " .. (o.Subtitle or o.Link or ""), TextColor3 = Status.Success[1], TextSize = 10,
+    drawIcon(row, "check", { size = 9, color = Status.Success[1], anchor = Vector2.new(0, .5), pos = UDim2.fromOffset(54, 37), thick = 1.6 })
+    create("TextLabel", {
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(67, 31), Size = UDim2.new(1, -182, 0, 12),
+        Text = "Verified  ·  " .. (o.Subtitle or o.Link or ""), TextColor3 = Status.Success[1], TextSize = 9,
         Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = row,
     })
 
     local btn = create("TextButton", {
-        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -12, .5, 0), Size = UDim2.fromOffset(96, 30),
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(90, 26),
         BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
         TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, ClipsDescendants = true, Parent = row,
     })
@@ -2807,10 +2823,10 @@ function Section:AddOwner(o)
     local _, _, oh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
     local btnL = create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "COPY LINK", ZIndex = 4,
-        TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, Parent = btn,
+        TextColor3 = WHITE, TextSize = 10, Font = Enum.Font.GothamBold, Parent = btn,
     })
-    btn.MouseEnter:Connect(function() oh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(102, 32) }, Enum.EasingStyle.Back) end)
-    btn.MouseLeave:Connect(function() oh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(96, 30) }, Enum.EasingStyle.Back) end)
+    btn.MouseEnter:Connect(function() oh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(95, 28) }, Enum.EasingStyle.Back) end)
+    btn.MouseLeave:Connect(function() oh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(90, 26) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
         local copied = o.Link ~= nil and Compat.copy(o.Link)
         btnL.Text = copied and "COPIED!" or "SEE LINK"
@@ -2821,7 +2837,7 @@ function Section:AddOwner(o)
         task.delay(1.6, function() btnL.Text = "COPY LINK" end)
         if o.Callback then task.spawn(o.Callback) end
     end)
-    -- YouTube + Discord cards under the owner card (o.Socials = false to hide, o.YouTube / o.Discord = link | false)
+    -- YouTube + Discord cards stacked under the owner card (o.Socials = false to hide, o.YouTube / o.Discord = link | false)
     local rows = { row }
     if o.Socials ~= false then
         local yt = o.YouTube == nil and "https://youtube.com/@yqantg" or o.YouTube
@@ -2875,48 +2891,49 @@ end
 
 function Section:AddSocial(o)
     o = o or {}
+    markInfo(self)
     local isYT = tostring(o.Kind or "YouTube"):lower():find("you", 1, true) ~= nil
     local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
     local link = o.Link or (isYT and "https://youtube.com/@yqantg" or "https://discord.gg/yurKERvexU")
-    local row = newRow(self, 88)
+    local row = newRow(self, 46)
 
     local thumb = create("Frame", {
-        Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(104, 64), BackgroundColor3 = WHITE,
+        Position = UDim2.fromOffset(10, 6), Size = UDim2.fromOffset(60, 34), BackgroundColor3 = WHITE,
         BorderSizePixel = 0, ClipsDescendants = true, Parent = row,
     })
-    corner(thumb, 10)
+    corner(thumb, 8)
     local tg = create("UIGradient", {
         Color = ColorSequence.new(brand:Lerp(BLACK, 0.45), Color3.fromRGB(12, 12, 14)), Rotation = 35, Parent = thumb,
     })
     animate(thumb, function(t) tg.Rotation = 35 + math.sin(t * 1.2) * 20 end, gateOf(self))
     local glow = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(90, 58),
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(50, 30),
         BackgroundColor3 = brand, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 1, Parent = thumb,
     })
-    corner(glow, 18)
+    corner(glow, 12)
     local logo = create("Frame", {
         AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(64, 46), ZIndex = 2, Parent = thumb,
+        Size = UDim2.fromOffset(40, 26), ZIndex = 2, Parent = thumb,
     })
     if isYT then
         local plate = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(58, 40),
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(36, 24),
             BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, ZIndex = 2, Parent = logo,
         })
-        corner(plate, 12)
-        playShape(plate, 15, 17, WHITE, 3)
+        corner(plate, 8)
+        playShape(plate, 10, 11, WHITE, 3)
     else
         local head = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(48, 34),
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(30, 22),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = logo,
         })
-        corner(head, 14)
+        corner(head, 9)
         for _, x in ipairs({ .32, .68 }) do
             local eye = create("Frame", {
-                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(x, .46), Size = UDim2.fromOffset(7, 11),
+                AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(x, .46), Size = UDim2.fromOffset(5, 8),
                 BackgroundColor3 = brand, BorderSizePixel = 0, ZIndex = 3, Parent = head,
             })
-            corner(eye, 4)
+            corner(eye, 3)
         end
     end
     -- optional real picture (banner / avatar) fades in over the drawn logo
@@ -2933,15 +2950,15 @@ function Section:AddSocial(o)
         end)
     end
 
-    local tag = text(row, isYT and "YOUTUBE" or "DISCORD", 9, "SubText", Enum.Font.GothamBold)
-    tag.Position = UDim2.fromOffset(130, 13); tag.Size = UDim2.new(1, -234, 0, 12)
-    local name = text(row, o.Title or (isYT and "@yqantg" or "Yqantg Community"), 18, "Text", Enum.Font.GothamBlack)
-    name.Position = UDim2.fromOffset(130, 26); name.Size = UDim2.new(1, -234, 0, 24)
-    local sub = text(row, o.Subtitle or (isYT and "Subscribe for updates" or "Join the community"), 10, "SubText", Enum.Font.GothamMedium)
-    sub.Position = UDim2.fromOffset(130, 54); sub.Size = UDim2.new(1, -234, 0, 14)
+    local tag = text(row, isYT and "YOUTUBE" or "DISCORD", 8, "SubText", Enum.Font.GothamBold)
+    tag.Position = UDim2.fromOffset(80, 5); tag.Size = UDim2.new(1, -186, 0, 10)
+    local name = text(row, o.Title or (isYT and "@yqantg" or "Yqantg Community"), 15, "Text", Enum.Font.GothamBlack)
+    name.Position = UDim2.fromOffset(80, 14); name.Size = UDim2.new(1, -186, 0, 18)
+    local sub = text(row, o.Subtitle or (isYT and "Subscribe for updates" or "Join the community"), 9, "SubText", Enum.Font.GothamMedium)
+    sub.Position = UDim2.fromOffset(80, 32); sub.Size = UDim2.new(1, -186, 0, 11)
 
     local btn = create("TextButton", {
-        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -12, .5, 0), Size = UDim2.fromOffset(86, 30),
+        AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(80, 26),
         BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = row,
     })
     corner(btn, 8)
@@ -2949,10 +2966,10 @@ function Section:AddSocial(o)
     local _, _, bh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
     local btnL = create("TextLabel", {
         BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "COPY LINK", ZIndex = 4,
-        TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, Parent = btn,
+        TextColor3 = WHITE, TextSize = 10, Font = Enum.Font.GothamBold, Parent = btn,
     })
-    btn.MouseEnter:Connect(function() bh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(92, 32) }, Enum.EasingStyle.Back) end)
-    btn.MouseLeave:Connect(function() bh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(86, 30) }, Enum.EasingStyle.Back) end)
+    btn.MouseEnter:Connect(function() bh.entry.on = true; tween(btn, 0.2, { Size = UDim2.fromOffset(85, 28) }, Enum.EasingStyle.Back) end)
+    btn.MouseLeave:Connect(function() bh.entry.on = false; tween(btn, 0.2, { Size = UDim2.fromOffset(80, 26) }, Enum.EasingStyle.Back) end)
     btn.MouseButton1Click:Connect(function()
         local copied = Compat.copy(link)
         btnL.Text = copied and "COPIED!" or "SEE LINK"
@@ -2968,20 +2985,21 @@ end
 
 ---------------------------------------------------------------- Live stats (FPS / ping / server)
 function Section:AddStats()
-    local row = newRow(self, 84)
-    local function stat(x, title, w)
-        local t = text(row, title, 9, "Accent", Enum.Font.GothamBold)
-        t.Position = UDim2.fromOffset(x, 10); t.Size = UDim2.fromOffset(w or 80, 12)
-        local v = text(row, "--", 24, "Text", Enum.Font.GothamBlack)
-        v.Position = UDim2.fromOffset(x, 22); v.Size = UDim2.fromOffset(w or 80, 28)
+    markInfo(self)
+    local row = newRow(self, 52)
+    local function stat(x, title)
+        local t = text(row, title, 8, "Accent", Enum.Font.GothamBold)
+        t.Position = UDim2.fromOffset(x, 5); t.Size = UDim2.fromOffset(70, 10)
+        local v = text(row, "--", 20, "Text", Enum.Font.GothamBlack)
+        v.Position = UDim2.fromOffset(x, 14); v.Size = UDim2.fromOffset(70, 24)
         return v
     end
-    local fpsL, pingL = stat(14, "FPS"), stat(100, "PING (MS)")
-    local sid = text(row, "SERVER ID  " .. tostring(game.JobId):sub(1, 8), 10, "SubText", Enum.Font.Code)
-    sid.Position = UDim2.fromOffset(200, 28); sid.Size = UDim2.new(1, -212, 0, 14)
-    local fillT = text(row, "SERVER FILL", 9, "SubText", Enum.Font.GothamBold)
-    fillT.Position = UDim2.fromOffset(14, 56); fillT.Size = UDim2.fromOffset(100, 12)
-    local track = create("Frame", { Position = UDim2.new(0, 14, 0, 71), Size = UDim2.new(1, -28, 0, 5), BorderSizePixel = 0, Parent = row })
+    local fpsL, pingL = stat(12, "FPS"), stat(84, "PING (MS)")
+    local sid = text(row, "SERVER ID  " .. tostring(game.JobId):sub(1, 8), 9, "SubText", Enum.Font.Code)
+    sid.Position = UDim2.fromOffset(170, 8); sid.Size = UDim2.new(1, -182, 0, 12)
+    local fillT = text(row, "SERVER FILL", 8, "SubText", Enum.Font.GothamBold)
+    fillT.Position = UDim2.fromOffset(170, 23); fillT.Size = UDim2.fromOffset(100, 10)
+    local track = create("Frame", { Position = UDim2.new(0, 12, 0, 42), Size = UDim2.new(1, -24, 0, 5), BorderSizePixel = 0, Parent = row })
     bind(track, "BackgroundColor3", "Panel")
     corner(track, 3)
     local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track })
@@ -3011,6 +3029,7 @@ end
 -- o.Support = { { "Drawing", true }, ... }  extra capability chips (max 4 chips shown)
 function Section:AddOverview(o)
     o = o or {}
+    markInfo(self)
     local rows = {}
     local function row(h) local r = newRow(self, h); rows[#rows + 1] = r; return r end
     local function lbl(parent, str, size, key, font, x, y, w, h)
@@ -3045,9 +3064,9 @@ function Section:AddOverview(o)
     end
 
     -- 1 · profile ----------------------------------------------------
-    local r1 = row(62)
+    local r1 = row(56)
     local av = create("ImageLabel", {
-        Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(44, 44), BorderSizePixel = 0,
+        Position = UDim2.fromOffset(10, 6), Size = UDim2.fromOffset(44, 44), BorderSizePixel = 0,
         Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150", Parent = r1,
     })
     bind(av, "BackgroundColor3", "Panel")
@@ -3055,13 +3074,13 @@ function Section:AddOverview(o)
     local ring = create("UIStroke", { Thickness = 2, Color = WHITE, Parent = av })
     local ringG = gradient(ring, "GlowGrad")
     animate(ring, function(t) ringG.Rotation = (t * 80) % 360 end, gateOf(self))
-    local dot = create("Frame", { Position = UDim2.fromOffset(42, 42), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Status.Success[1], BorderSizePixel = 0, ZIndex = 3, Parent = r1 })
+    local dot = create("Frame", { Position = UDim2.fromOffset(42, 39), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Status.Success[1], BorderSizePixel = 0, ZIndex = 3, Parent = r1 })
     corner(dot, 5)
     stroke(dot, "Element", 2, 0)
     TweenService:Create(dot, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { BackgroundTransparency = 0.45 }):Play()
-    lbl(r1, "WELCOME BACK", 8, "Accent", Enum.Font.GothamBold, 64, 8, UDim2.fromOffset(140, 0), 11)
-    lbl(r1, LocalPlayer.DisplayName, 15, "Text", Enum.Font.GothamBold, 64, 19, UDim2.fromOffset(140, 0), 20)
-    lbl(r1, "@" .. LocalPlayer.Name, 10, "SubText", Enum.Font.Gotham, 64, 40, UDim2.fromOffset(140, 0), 13)
+    lbl(r1, "WELCOME BACK", 8, "Accent", Enum.Font.GothamBold, 64, 5, UDim2.fromOffset(140, 0), 11)
+    lbl(r1, LocalPlayer.DisplayName, 15, "Text", Enum.Font.GothamBold, 64, 16, UDim2.fromOffset(140, 0), 20)
+    lbl(r1, "@" .. LocalPlayer.Name, 10, "SubText", Enum.Font.Gotham, 64, 37, UDim2.fromOffset(140, 0), 13)
     local function pill(y, str)
         local p = create("Frame", { Position = UDim2.fromOffset(212, y), Size = UDim2.fromOffset(104, 18), BorderSizePixel = 0, Parent = r1 })
         bind(p, "BackgroundColor3", "Panel")
@@ -3070,9 +3089,9 @@ function Section:AddOverview(o)
         local t = text(p, str, 10, "SubText", Enum.Font.GothamBold)
         t.Size = UDim2.fromScale(1, 1); t.TextXAlignment = Enum.TextXAlignment.Center
     end
-    pill(10, "ID " .. LocalPlayer.UserId)
-    pill(34, LocalPlayer.AccountAge .. " days old")
-    local box = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 9), Size = UDim2.fromOffset(72, 44), BorderSizePixel = 0, Parent = r1 })
+    pill(7, "ID " .. LocalPlayer.UserId)
+    pill(31, LocalPlayer.AccountAge .. " days old")
+    local box = create("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 6), Size = UDim2.fromOffset(72, 44), BorderSizePixel = 0, Parent = r1 })
     bind(box, "BackgroundColor3", "Panel")
     corner(box, 10)
     stroke(box, "Accent", 1, 0.55)
@@ -3086,8 +3105,8 @@ function Section:AddOverview(o)
     connect(Players.PlayerRemoving, function() task.defer(updPlayers) end)
 
     -- 2 · owner ------------------------------------------------------
-    local r2 = row(52)
-    local icon = create("Frame", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = r2 })
+    local r2 = row(46)
+    local icon = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = r2 })
     corner(icon, 10)
     local ig = gradient(icon, "AccentGrad")
     ig.Rotation = 45
@@ -3096,9 +3115,9 @@ function Section:AddOverview(o)
         TextColor3 = Color3.new(0, 0, 0), TextSize = 20, Font = Enum.Font.GothamBlack, Parent = icon,
     })
     animate(icon, function(t) ig.Rotation = 45 + math.sin(t * 1.5) * 40 end, gateOf(self))
-    lbl(r2, "UI LIBRARY OWNER", 8, "SubText", Enum.Font.GothamBold, 54, 6, UDim2.new(1, -160, 0, 0), 10)
+    lbl(r2, "UI LIBRARY OWNER", 8, "SubText", Enum.Font.GothamBold, 54, 4, UDim2.new(1, -160, 0, 0), 10)
     local oname = create("TextLabel", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 16), Size = UDim2.new(1, -160, 0, 20),
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 13), Size = UDim2.new(1, -160, 0, 20),
         Text = o.Owner or "Yqantg Hub", TextColor3 = WHITE, TextSize = 15, Font = Enum.Font.GothamBlack,
         TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = r2,
     })
@@ -3106,7 +3125,7 @@ function Section:AddOverview(o)
     bind(ng, "Color", "TextGrad")
     animate(oname, function(t) ng.Offset = Vector2.new(math.sin(t * 1.3) * 0.65, 0) end, gateOf(self))
     create("TextLabel", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 36), Size = UDim2.new(1, -160, 0, 12),
+        BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 33), Size = UDim2.new(1, -160, 0, 12),
         Text = "Verified  ·  " .. (o.OwnerSubtitle or "Official owner"), TextColor3 = Status.Success[1], TextSize = 9,
         Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = r2,
     })
@@ -3116,12 +3135,12 @@ function Section:AddOverview(o)
 
     -- 3 · YouTube | Discord (side by side) -----------------------------
     if ytLink or dcLink then
-        local r3 = row(52)
+        local r3 = row(46)
         local function half(idx, kind, link, title)
             local isYT = kind == "YouTube"
             local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
             local h = create("Frame", { BackgroundTransparency = 1, Position = UDim2.fromScale(idx * 0.5, 0), Size = UDim2.fromScale(0.5, 1), Parent = r3 })
-            local badgeF = create("Frame", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = h })
+            local badgeF = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = h })
             corner(badgeF, 10)
             create("UIGradient", { Color = ColorSequence.new(brand:Lerp(BLACK, 0.45), Color3.fromRGB(12, 12, 14)), Rotation = 35, Parent = badgeF })
             local logo = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromOffset(26, 20), ZIndex = 2, Parent = badgeF })
@@ -3137,8 +3156,8 @@ function Section:AddOverview(o)
                     corner(eye, 2)
                 end
             end
-            lbl(h, isYT and "YOUTUBE" or "DISCORD", 8, "SubText", Enum.Font.GothamBold, 52, 9, UDim2.new(1, -118, 0, 0), 10)
-            lbl(h, title, 13, "Text", Enum.Font.GothamBlack, 52, 21, UDim2.new(1, -118, 0, 0), 18)
+            lbl(h, isYT and "YOUTUBE" or "DISCORD", 8, "SubText", Enum.Font.GothamBold, 52, 6, UDim2.new(1, -118, 0, 0), 10)
+            lbl(h, title, 13, "Text", Enum.Font.GothamBlack, 52, 18, UDim2.new(1, -118, 0, 0), 18)
             copyBtn(h, "COPY", 52, link, kind)
         end
         if ytLink then half(0, "YouTube", ytLink, o.YouTubeTitle or "@yqantg") end
@@ -3150,17 +3169,17 @@ function Section:AddOverview(o)
     end
 
     -- 4 · live stats -------------------------------------------------
-    local r4 = row(58)
+    local r4 = row(54)
     local function stat(x, title)
-        lbl(r4, title, 8, "Accent", Enum.Font.GothamBold, x, 6, UDim2.fromOffset(70, 0), 10)
+        lbl(r4, title, 8, "Accent", Enum.Font.GothamBold, x, 4, UDim2.fromOffset(70, 0), 10)
         local v = text(r4, "--", 20, "Text", Enum.Font.GothamBlack)
-        v.Position = UDim2.fromOffset(x, 16); v.Size = UDim2.fromOffset(70, 26)
+        v.Position = UDim2.fromOffset(x, 14); v.Size = UDim2.fromOffset(70, 26)
         return v
     end
     local fpsL, pingL = stat(12, "FPS"), stat(84, "PING (MS)")
-    lbl(r4, "SERVER ID  " .. tostring(game.JobId):sub(1, 8), 9, "SubText", Enum.Font.Code, 170, 9, UDim2.new(1, -182, 0, 0), 12)
-    local fillT = lbl(r4, "SERVER FILL", 8, "SubText", Enum.Font.GothamBold, 170, 27, UDim2.fromOffset(100, 0), 10)
-    local track = create("Frame", { Position = UDim2.new(0, 12, 0, 47), Size = UDim2.new(1, -24, 0, 5), BorderSizePixel = 0, Parent = r4 })
+    lbl(r4, "SERVER ID  " .. tostring(game.JobId):sub(1, 8), 9, "SubText", Enum.Font.Code, 170, 7, UDim2.new(1, -182, 0, 0), 12)
+    local fillT = lbl(r4, "SERVER FILL", 8, "SubText", Enum.Font.GothamBold, 170, 25, UDim2.fromOffset(100, 0), 10)
+    local track = create("Frame", { Position = UDim2.new(0, 12, 0, 44), Size = UDim2.new(1, -24, 0, 5), BorderSizePixel = 0, Parent = r4 })
     bind(track, "BackgroundColor3", "Panel")
     corner(track, 3)
     local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = track })
@@ -3182,10 +3201,10 @@ function Section:AddOverview(o)
     end)
 
     -- 5 · detected executor + capability chips -------------------------
-    local r5 = row(44)
+    local r5 = row(40)
     local rep = Compat.report()
-    lbl(r5, "EXECUTOR", 8, "Accent", Enum.Font.GothamBold, 12, 7, UDim2.new(1, -336, 0, 0), 10)
-    lbl(r5, tostring(o.Executor or rep.Executor or "Unknown"), 13, "Text", Enum.Font.GothamBold, 12, 19, UDim2.new(1, -336, 0, 0), 18)
+    lbl(r5, "EXECUTOR", 8, "Accent", Enum.Font.GothamBold, 12, 5, UDim2.new(1, -336, 0, 0), 10)
+    lbl(r5, tostring(o.Executor or rep.Executor or "Unknown"), 13, "Text", Enum.Font.GothamBold, 12, 17, UDim2.new(1, -336, 0, 0), 18)
     local items = {}
     for _, it in ipairs(o.Support or {}) do items[#items + 1] = it end
     items[#items + 1] = { "Clipboard", rep.Clipboard }
@@ -3264,6 +3283,7 @@ function Tab:AddSection(o)
     local fscale = create("UIScale", { Parent = frame })
     self._secs = self._secs or {}
     self._secs[#self._secs + 1] = fscale
+    sec.Frame = frame
     local pad = create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), Parent = frame })
     create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
     if o.NoHeader then
@@ -4493,7 +4513,7 @@ function Yqantg:CreateWindow(cfg)
 
     function Window:AddTab(o)
         if type(o) == "string" then o = { Name = o } end
-        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1 }, Tab)
+        local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1, Fit = o.Fit }, Tab)
 
         local b = create("TextButton", {
             Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
@@ -4517,7 +4537,7 @@ function Yqantg:CreateWindow(cfg)
             ScrollBarThickness = 3, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), Parent = group,
         })
         bind(page, "ScrollBarImageColor3", "Accent")
-        create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 12), Parent = page })
+        local pagePad = create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 12), Parent = page })
         local holder = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Parent = page })
         create("UIListLayout", { Padding = UDim.new(0, 0), SortOrder = Enum.SortOrder.LayoutOrder, Parent = holder })
         local full = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 1, Parent = holder })
@@ -4533,6 +4553,26 @@ function Yqantg:CreateWindow(cfg)
         tab.Left, tab.Right = column(), column()
         tab.Full, tab.FullPad = full, fullPad
         tab.Page, tab.Button, tab.Label, tab.Arrow, tab.Group = page, b, lab, arrow, group
+
+        -- "Fit" tabs (info / YouTube cards): no scrolling, everything visible. The scrollbar only
+        -- returns when the content is genuinely taller than the window.
+        local function fitUpdate()
+            local on = tab.Fit == true or (tab.Fit == nil and tab._info == true)
+            if not on then return end
+            if pagePad.PaddingTop.Offset ~= 6 then
+                pagePad.PaddingTop = UDim.new(0, 6); pagePad.PaddingBottom = UDim.new(0, 6)
+            end
+            local view = page.AbsoluteWindowSize.Y
+            if view <= 1 then return end
+            local over = page.AbsoluteCanvasSize.Y > view + 2
+            if page.ScrollingEnabled ~= over then page.ScrollingEnabled = over end
+            local th = over and 3 or 0
+            if page.ScrollBarThickness ~= th then page.ScrollBarThickness = th end
+            if not over and page.CanvasPosition.Y ~= 0 then page.CanvasPosition = Vector2.zero end
+        end
+        tab._fitUpdate = fitUpdate
+        page:GetPropertyChangedSignal("AbsoluteCanvasSize"):Connect(fitUpdate)
+        page:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(fitUpdate)
 
         b.MouseButton1Click:Connect(function()
             if tab.Locked then
