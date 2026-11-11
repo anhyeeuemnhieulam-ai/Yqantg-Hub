@@ -1161,121 +1161,272 @@ function Yqantg:Splash(o)
     local g = self:_ensureGui()
     local steps = o.Steps or { "loading modules", "finalizing" }
     local total = o.Duration or 3
+    local titleStr = o.Title or "YQANTG"
 
-    local root = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 200, Parent = g })
+    local glyphs = {}
+    for _, cp in utf8.codes(titleStr) do glyphs[#glyphs + 1] = utf8.char(cp) end
+
+    local cam = workspace.CurrentCamera
+    local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+    local k = math.clamp(math.min(vp.X / 520, vp.Y / 520), 0.55, 1.1)       -- fit phones
+    local rmax = 0.56 * math.sqrt(vp.X * vp.X + vp.Y * vp.Y) / k
+    local CY = -70                                                          -- logo centre (offset from middle)
+
+    ---------------------------------------------------------------- backdrop
+    local root = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 200, ClipsDescendants = true, Parent = g })
     local bgG = create("UIGradient", {
         Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(44, 44, 48)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(26, 26, 32)),
             ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
-        }),
-        Rotation = 45, Parent = root,
+        }), Rotation = 45, Parent = root,
     })
-
-    local outer = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, -62), Size = UDim2.fromOffset(150, 150),
-        BackgroundTransparency = 1, ZIndex = 201, Parent = root,
+    local stage = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1 / k, 1 / k),
+        BackgroundTransparency = 1, Parent = root,
     })
-    corner(outer, 75)
-    local os1 = create("UIStroke", { Thickness = 1, Color = WHITE, Transparency = 0.75, Parent = outer })
+    create("UIScale", { Scale = k, Parent = stage })
 
-    local ring = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, 0), Size = UDim2.fromOffset(112, 112),
-        BackgroundTransparency = 1, ZIndex = 201, Parent = outer,
+    -- hyperspace streaks radiating from the logo
+    local streaks = {}
+    for i = 1, UserInputService.TouchEnabled and 22 or 34 do
+        local a = math.random() * math.pi * 2
+        local f = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+            Rotation = math.deg(a), Size = UDim2.fromOffset(3, 1), BackgroundTransparency = 1, ZIndex = 1, Parent = stage,
+        })
+        streaks[i] = { f = f, a = a, r = math.random() * rmax, v = 60 + math.random() * 200, th = math.random() < 0.25 and 2 or 1, al = 0.25 + math.random() * 0.45 }
+    end
+
+    -- scanline + soft band sweeping down the screen
+    local band = create("Frame", { Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = stage })
+    create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.85, 0.93), NumberSequenceKeypoint.new(1, 1) }), Parent = band })
+    local scan = create("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = stage })
+    create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.35), NumberSequenceKeypoint.new(1, 1) }), Parent = scan })
+
+    ---------------------------------------------------------------- HUD
+    local brackets = {}
+    for _, c in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
+        local ax, ay = c[1], c[2]
+        local sx, sy = ax == 0 and 1 or -1, ay == 0 and 1 or -1
+        for _, sz in ipairs({ UDim2.fromOffset(26, 2), UDim2.fromOffset(2, 26) }) do
+            brackets[#brackets + 1] = create("Frame", {
+                AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, sx * 20, ay, sy * 20), Size = sz,
+                BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 5, Parent = stage,
+            })
+        end
+    end
+    local function hud(txt, ax, ay)
+        local l = create("TextLabel", {
+            BackgroundTransparency = 1, AnchorPoint = Vector2.new(ax, ay),
+            Position = UDim2.new(ax, ax == 0 and 54 or -54, ay, ay == 0 and 20 or -20), Size = UDim2.fromOffset(190, 12),
+            Text = txt, TextSize = 10, Font = Enum.Font.Code, TextTransparency = 0.45,
+            TextXAlignment = ax == 0 and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right, ZIndex = 5, Parent = stage,
+        })
+        bind(l, "TextColor3", "SubText")
+        return l
+    end
+    hud("// " .. titleStr:upper() .. " BOOT", 0, 0)
+    hud("BUILD v" .. tostring(self.Version), 1, 0)
+    local memL = hud("MEM 0x0000", 0, 1)
+    local sysL = hud("SYS // ONLINE", 1, 1)
+
+    ---------------------------------------------------------------- logo core
+    local core = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, CY), Size = UDim2.fromOffset(200, 200),
+        BackgroundTransparency = 1, ZIndex = 3, Parent = stage,
     })
-    corner(ring, 56)
-    local rs = create("UIStroke", { Thickness = 3, Color = WHITE, Parent = ring })
-    local rg = gradient(rs, "GlowGrad")
-    local pulse = TweenService:Create(ring, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.fromOffset(120, 120) })
-    pulse:Play()
+    local coreS = create("UIScale", { Scale = 0, Parent = core })
 
+    local waveTweens = {}
     for i = 1, 2 do
         local w = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(112, 112),
-            BackgroundTransparency = 1, ZIndex = 200, Parent = outer,
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(92, 92),
+            BackgroundTransparency = 1, ZIndex = 1, Parent = core,
         })
         corner(w, 500)
         local ws = create("UIStroke", { Thickness = 1.5, Color = WHITE, Transparency = 0.3, Parent = w })
         local info = TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1, false, (i - 1) * 1.1)
-        TweenService:Create(w, info, { Size = UDim2.fromOffset(280, 280) }):Play()
-        TweenService:Create(ws, info, { Transparency = 1 }):Play()
+        local a, b = TweenService:Create(w, info, { Size = UDim2.fromOffset(300, 300) }), TweenService:Create(ws, info, { Transparency = 1 })
+        a:Play(); b:Play()
+        waveTweens[#waveTweens + 1] = a; waveTweens[#waveTweens + 1] = b
     end
+
+    -- gyroscope: three tilted pill rings spinning at different speeds
+    local rings = {}
+    for i = 1, 3 do
+        local f = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(176, 62),
+            BackgroundTransparency = 1, Rotation = (i - 1) * 60, ZIndex = 2, Parent = core,
+        })
+        corner(f, 500)
+        local st = create("UIStroke", { Thickness = 1.4, Color = WHITE, Transparency = 1, Parent = f })
+        rings[i] = { f = f, s = st, base = (i - 1) * 60, sp = (i % 2 == 0 and -1 or 1) * (26 + i * 12) }
+    end
+
+    local disc = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(92, 92),
+        BackgroundColor3 = Color3.fromRGB(10, 10, 12), BackgroundTransparency = 0.1, BorderSizePixel = 0, ZIndex = 3, Parent = core,
+    })
+    corner(disc, 46)
+    local rs = create("UIStroke", { Thickness = 3, Color = WHITE, Parent = disc })
+    local rg = gradient(rs, "GlowGrad")
+    local pulse = TweenService:Create(disc, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.fromOffset(100, 100) })
+    pulse:Play()
+    local letter = create("TextLabel", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+        ZIndex = 4, Text = glyphs[1] and glyphs[1]:upper() or "Y", TextSize = 44, Font = Enum.Font.GothamBlack, Parent = disc,
+    })
+    bind(letter, "TextColor3", "Accent")
 
     local dots = {}
     for i = 1, 3 do
         local d = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(i == 1 and 9 or 6, i == 1 and 9 or 6),
-            BackgroundColor3 = WHITE, BorderSizePixel = 0, BackgroundTransparency = i == 1 and 0 or 0.4, ZIndex = 203, Parent = outer,
+            BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 5, Parent = core,
         })
         corner(d, 5)
         dots[i] = d
     end
 
-    local letter = create("TextLabel", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
-        ZIndex = 202, Text = (o.Title or "N"):sub(1, 1):upper(), TextSize = 46, Font = Enum.Font.GothamBlack, Parent = ring,
-    })
-    bind(letter, "TextColor3", "Accent")
-
-    local titleStr = o.Title or "YQANTG"
-    local title = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 28),
-        Size = UDim2.fromOffset(340, 36), Text = titleStr, TextSize = 30, Font = Enum.Font.GothamBlack,
-        MaxVisibleGraphemes = 0, ZIndex = 201, TextColor3 = WHITE, Parent = root,
-    })
+    ---------------------------------------------------------------- text
+    local titlePos = UDim2.new(.5, 0, .5, 40)
+    local function titleLabel(color, z)
+        return create("TextLabel", {
+            BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = titlePos, Size = UDim2.fromOffset(440, 40),
+            Text = "", TextSize = 34, Font = Enum.Font.GothamBlack, TextColor3 = color, ZIndex = z, Parent = stage,
+        })
+    end
+    local gR = titleLabel(Color3.fromRGB(255, 40, 90), 4); gR.TextTransparency = 1
+    local gC = titleLabel(Color3.fromRGB(40, 230, 255), 4); gC.TextTransparency = 1
+    local title = titleLabel(WHITE, 5)
     local tg = create("UIGradient", { Parent = title })
     bind(tg, "Color", "TextGrad")
 
+    local subPos = UDim2.new(.5, 0, .5, 84)
     local sub = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 64),
-        Size = UDim2.fromOffset(340, 16), Text = o.Subtitle or "", TextSize = 12, TextTransparency = 1,
-        Font = Enum.Font.Gotham, ZIndex = 201, Parent = root,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = subPos + UDim2.fromOffset(0, 10),
+        Size = UDim2.fromOffset(440, 16), Text = (o.Subtitle or ""):upper(), TextSize = 11, TextTransparency = 1,
+        Font = Enum.Font.GothamMedium, ZIndex = 5, Parent = stage,
     })
     bind(sub, "TextColor3", "SubText")
     local stepL = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 90),
-        Size = UDim2.fromOffset(340, 16), Text = "", TextSize = 11, Font = Enum.Font.Code, ZIndex = 201, Parent = root,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 112),
+        Size = UDim2.fromOffset(300, 14), Text = "", TextSize = 11, Font = Enum.Font.Code, ZIndex = 5, Parent = stage,
     })
     bind(stepL, "TextColor3", "Accent")
 
-    local track = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 118), Size = UDim2.fromOffset(280, 6), BorderSizePixel = 0, ZIndex = 201, Parent = root })
-    bind(track, "BackgroundColor3", "Element")
-    corner(track, 3)
-    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 202, Parent = track })
-    corner(fill, 3)
-    gradient(fill, "AccentGrad")
+    -- segmented progress bar
+    local NSEG = 28
+    local holder = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 140), Size = UDim2.fromOffset(277, 6), BackgroundTransparency = 1, ZIndex = 5, Parent = stage })
+    local segs = {}
+    for i = 1, NSEG do
+        local s = create("Frame", { Position = UDim2.fromOffset((i - 1) * 10, 0), Size = UDim2.fromOffset(7, 6), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 5, Parent = holder })
+        bind(s, "BackgroundColor3", "Accent")
+        corner(s, 1)
+        segs[i] = s
+    end
     local pct = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 130),
-        Size = UDim2.fromOffset(280, 16), Text = "0%", TextSize = 11, Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 201, Parent = root,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 152),
+        Size = UDim2.fromOffset(277, 14), Text = "0%", TextSize = 11, Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 5, Parent = stage,
     })
     bind(pct, "TextColor3", "SubText")
 
+    ---------------------------------------------------------------- per-frame animation
+    local GLYPHS = "01#$%&@<>/\\|=+*"
+    local function scramble(n)
+        local out = {}
+        for i, c in ipairs(glyphs) do
+            if i <= n or c == " " then out[i] = c
+            else local r = math.random(#GLYPHS); out[i] = GLYPHS:sub(r, r) end
+        end
+        return table.concat(out)
+    end
+    local function setTitle(txt, glitch)
+        title.Text, gR.Text, gC.Text = txt, txt, txt
+        if glitch then
+            gR.Position = UDim2.new(.5, -math.random(2, 6), .5, 40 + math.random(-2, 2))
+            gC.Position = UDim2.new(.5, math.random(2, 6), .5, 40 + math.random(-2, 2))
+            gR.TextTransparency, gC.TextTransparency = 0.4, 0.4
+        else
+            gR.Position, gC.Position = titlePos, titlePos
+            gR.TextTransparency, gC.TextTransparency = 1, 1
+        end
+    end
+
     local t0 = os.clock()
-    local exiting = false
-    local spin = RunService.Heartbeat:Connect(function()
+    local exiting, revealed = false, false
+    local warp, warpTo = 1, 1
+    local nextGlitch, glitchEnd, memT = 2.4, 0, 0
+    local spin = RunService.Heartbeat:Connect(function(dt)
         local t = os.clock() - t0
         rg.Rotation = (t * 200) % 360
         tg.Offset = Vector2.new(math.sin(t * 1.6) * 0.6, 0)
         bgG.Rotation = 45 + math.sin(t * 0.7) * 20
-        -- 3D orbits: tilted ellipses, depth = size + opacity + draw order
+
+        warp = warp + (warpTo - warp) * math.min(1, dt * 5)
+        for _, s in ipairs(streaks) do
+            s.r = s.r + s.v * dt * warp
+            if s.r > rmax then s.r = 30 + math.random() * 40 end
+            s.f.Position = UDim2.new(.5, math.cos(s.a) * s.r, .5, CY + math.sin(s.a) * s.r)
+            s.f.Size = UDim2.fromOffset(3 + s.r * 0.06 * warp, s.th)
+            if not exiting then s.f.BackgroundTransparency = 1 - math.clamp(s.r / 300, 0, 1) * s.al end
+        end
+
+        local sy = (t * 0.38) % 1.3 - 0.15
+        scan.Position = UDim2.new(0, 0, sy, 0)
+        band.Position = UDim2.new(0, 0, sy, -44)
+
+        for _, r in ipairs(rings) do r.f.Rotation = r.base + t * r.sp end
         for i, d in ipairs(dots) do
             local a = t * (2.4 - i * 0.4) + i * 2.1
             local tilt, phi = 0.5 + i * 0.45, i * 1.25
-            local ox, oy = math.cos(a) * 80, math.sin(a) * 80 * math.sin(tilt)
+            local ox, oy = math.cos(a) * 88, math.sin(a) * 88 * math.sin(tilt)
             local z = math.sin(a) * math.cos(tilt)
             d.Position = UDim2.new(.5, ox * math.cos(phi) - oy * math.sin(phi), .5, ox * math.sin(phi) + oy * math.cos(phi))
             local sz = (i == 1 and 9 or 6) * (1 + z * 0.55)
             d.Size = UDim2.fromOffset(sz, sz)
-            d.ZIndex = z > 0 and 203 or 199
+            d.ZIndex = z > 0 and 5 or 0
             if not exiting then d.BackgroundTransparency = math.clamp(0.4 - z * 0.4, 0, 0.9) end
+        end
+
+        if not exiting then
+            memT = memT + dt
+            if memT > 0.1 then memT = 0; memL.Text = string.format("MEM 0x%04X", math.random(0, 65535)) end
+            sysL.TextTransparency = 0.25 + 0.4 * (math.sin(t * 5) > 0 and 1 or 0)
+            if revealed then
+                if t >= nextGlitch then glitchEnd = t + 0.12; nextGlitch = t + 1.4 + math.random() * 1.6 end
+                if t < glitchEnd then
+                    gR.Position = UDim2.new(.5, -math.random(2, 6), .5, 40 + math.random(-2, 2))
+                    gC.Position = UDim2.new(.5, math.random(2, 6), .5, 40 + math.random(-2, 2))
+                    gR.TextTransparency, gC.TextTransparency = 0.35, 0.35
+                    title.Position = UDim2.new(.5, math.random(-2, 2), .5, 40)
+                else
+                    gR.TextTransparency, gC.TextTransparency = 1, 1
+                    title.Position = titlePos
+                end
+            end
         end
     end)
 
-    -- title typewriter + subtitle fade
+    ---------------------------------------------------------------- intro choreography
     task.spawn(function()
-        for n = 1, #titleStr do title.MaxVisibleGraphemes = n; task.wait(0.05) end
-        tween(sub, 0.5, { TextTransparency = 0 })
+        tween(coreS, 0.9, { Scale = 1 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        for i, r in ipairs(rings) do task.delay(0.15 * i, function() tween(r.s, 0.5, { Transparency = 0.3 }) end) end
+        for _, b in ipairs(brackets) do tween(b, 0.6, { BackgroundTransparency = 0.5 }) end
+        task.wait(0.4)
+        for n = 0, #glyphs do
+            for _ = 1, 3 do
+                if exiting then return end
+                setTitle(scramble(n), true)
+                task.wait(0.025)
+            end
+        end
+        if exiting then return end
+        setTitle(titleStr, false)
+        revealed = true
+        tween(sub, 0.6, { TextTransparency = 0, Position = subPos })
     end)
 
     local lastStep = 0
@@ -1283,7 +1434,11 @@ function Yqantg:Splash(o)
     while true do
         local a = math.clamp((os.clock() - start) / total, 0, 1)
         local e = 1 - (1 - a) ^ 2
-        fill.Size = UDim2.fromScale(e, 1)
+        local lit = e * NSEG
+        for i, s in ipairs(segs) do
+            local d = lit - (i - 1)
+            s.BackgroundTransparency = d >= 1 and 0.05 or (d > 0 and (0.88 - d * 0.83) or 0.88)
+        end
         pct.Text = math.floor(e * 100) .. "%"
         local idx = math.clamp(math.floor(a * #steps) + 1, 1, #steps)
         if idx ~= lastStep then
@@ -1303,18 +1458,36 @@ function Yqantg:Splash(o)
         RunService.Heartbeat:Wait()
     end
     pct.Text = "100%"
-    task.wait(0.3)
+    task.wait(0.2)
 
+    ---------------------------------------------------------------- exit: warp jump -> shockwave -> flash
     pulse:Cancel()
+    for _, tw in ipairs(waveTweens) do tw:Cancel() end
+    warpTo = 10
+    tween(coreS, 0.55, { Scale = 1.5 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    task.wait(0.5)
     exiting = true
-    tween(outer, 0.55, { Size = UDim2.fromOffset(460, 460) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tween(root, 0.5, { BackgroundTransparency = 1 })
     for _, d in ipairs(root:GetDescendants()) do
         if d:IsA("TextLabel") then tween(d, 0.45, { TextTransparency = 1 })
         elseif d:IsA("Frame") then tween(d, 0.45, { BackgroundTransparency = 1 })
         elseif d:IsA("UIStroke") then tween(d, 0.45, { Transparency = 1 }) end
     end
-    task.wait(0.55)
+    for i = 1, 3 do
+        local w = create("Frame", {
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, CY), Size = UDim2.fromOffset(60, 60),
+            BackgroundTransparency = 1, ZIndex = 6, Parent = stage,
+        })
+        corner(w, 500)
+        local ws = create("UIStroke", { Thickness = 2.5, Color = WHITE, Transparency = 0.1, Parent = w })
+        task.delay((i - 1) * 0.07, function()
+            tween(w, 0.7, { Size = UDim2.fromOffset(1000, 1000) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+            tween(ws, 0.7, { Transparency = 1 })
+        end)
+    end
+    local flash = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 10, Parent = stage })
+    tween(flash, 0.5, { BackgroundTransparency = 1 })
+    task.wait(0.75)
     spin:Disconnect()
     root:Destroy()
 end
