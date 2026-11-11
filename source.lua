@@ -1161,272 +1161,121 @@ function Yqantg:Splash(o)
     local g = self:_ensureGui()
     local steps = o.Steps or { "loading modules", "finalizing" }
     local total = o.Duration or 3
-    local titleStr = o.Title or "YQANTG"
 
-    local glyphs = {}
-    for _, cp in utf8.codes(titleStr) do glyphs[#glyphs + 1] = utf8.char(cp) end
-
-    local cam = workspace.CurrentCamera
-    local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-    local k = math.clamp(math.min(vp.X / 520, vp.Y / 520), 0.55, 1.1)       -- fit phones
-    local rmax = 0.56 * math.sqrt(vp.X * vp.X + vp.Y * vp.Y) / k
-    local CY = -70                                                          -- logo centre (offset from middle)
-
-    ---------------------------------------------------------------- backdrop
-    local root = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 200, ClipsDescendants = true, Parent = g })
+    local root = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 200, Parent = g })
     local bgG = create("UIGradient", {
         Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)),
-            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(26, 26, 32)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(44, 44, 48)),
             ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
-        }), Rotation = 45, Parent = root,
+        }),
+        Rotation = 45, Parent = root,
     })
-    local stage = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1 / k, 1 / k),
-        BackgroundTransparency = 1, Parent = root,
+
+    local outer = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, -62), Size = UDim2.fromOffset(150, 150),
+        BackgroundTransparency = 1, ZIndex = 201, Parent = root,
     })
-    create("UIScale", { Scale = k, Parent = stage })
+    corner(outer, 75)
+    local os1 = create("UIStroke", { Thickness = 1, Color = WHITE, Transparency = 0.75, Parent = outer })
 
-    -- hyperspace streaks radiating from the logo
-    local streaks = {}
-    for i = 1, UserInputService.TouchEnabled and 22 or 34 do
-        local a = math.random() * math.pi * 2
-        local f = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), BackgroundColor3 = WHITE, BorderSizePixel = 0,
-            Rotation = math.deg(a), Size = UDim2.fromOffset(3, 1), BackgroundTransparency = 1, ZIndex = 1, Parent = stage,
-        })
-        streaks[i] = { f = f, a = a, r = math.random() * rmax, v = 60 + math.random() * 200, th = math.random() < 0.25 and 2 or 1, al = 0.25 + math.random() * 0.45 }
-    end
-
-    -- scanline + soft band sweeping down the screen
-    local band = create("Frame", { Size = UDim2.new(1, 0, 0, 46), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = stage })
-    create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.85, 0.93), NumberSequenceKeypoint.new(1, 1) }), Parent = band })
-    local scan = create("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 2, Parent = stage })
-    create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.35), NumberSequenceKeypoint.new(1, 1) }), Parent = scan })
-
-    ---------------------------------------------------------------- HUD
-    local brackets = {}
-    for _, c in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }) do
-        local ax, ay = c[1], c[2]
-        local sx, sy = ax == 0 and 1 or -1, ay == 0 and 1 or -1
-        for _, sz in ipairs({ UDim2.fromOffset(26, 2), UDim2.fromOffset(2, 26) }) do
-            brackets[#brackets + 1] = create("Frame", {
-                AnchorPoint = Vector2.new(ax, ay), Position = UDim2.new(ax, sx * 20, ay, sy * 20), Size = sz,
-                BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 5, Parent = stage,
-            })
-        end
-    end
-    local function hud(txt, ax, ay)
-        local l = create("TextLabel", {
-            BackgroundTransparency = 1, AnchorPoint = Vector2.new(ax, ay),
-            Position = UDim2.new(ax, ax == 0 and 54 or -54, ay, ay == 0 and 20 or -20), Size = UDim2.fromOffset(190, 12),
-            Text = txt, TextSize = 10, Font = Enum.Font.Code, TextTransparency = 0.45,
-            TextXAlignment = ax == 0 and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right, ZIndex = 5, Parent = stage,
-        })
-        bind(l, "TextColor3", "SubText")
-        return l
-    end
-    hud("// " .. titleStr:upper() .. " BOOT", 0, 0)
-    hud("BUILD v" .. tostring(self.Version), 1, 0)
-    local memL = hud("MEM 0x0000", 0, 1)
-    local sysL = hud("SYS // ONLINE", 1, 1)
-
-    ---------------------------------------------------------------- logo core
-    local core = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, CY), Size = UDim2.fromOffset(200, 200),
-        BackgroundTransparency = 1, ZIndex = 3, Parent = stage,
+    local ring = create("Frame", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, 0), Size = UDim2.fromOffset(112, 112),
+        BackgroundTransparency = 1, ZIndex = 201, Parent = outer,
     })
-    local coreS = create("UIScale", { Scale = 0, Parent = core })
+    corner(ring, 56)
+    local rs = create("UIStroke", { Thickness = 3, Color = WHITE, Parent = ring })
+    local rg = gradient(rs, "GlowGrad")
+    local pulse = TweenService:Create(ring, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.fromOffset(120, 120) })
+    pulse:Play()
 
-    local waveTweens = {}
     for i = 1, 2 do
         local w = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(92, 92),
-            BackgroundTransparency = 1, ZIndex = 1, Parent = core,
+            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(112, 112),
+            BackgroundTransparency = 1, ZIndex = 200, Parent = outer,
         })
         corner(w, 500)
         local ws = create("UIStroke", { Thickness = 1.5, Color = WHITE, Transparency = 0.3, Parent = w })
         local info = TweenInfo.new(2.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1, false, (i - 1) * 1.1)
-        local a, b = TweenService:Create(w, info, { Size = UDim2.fromOffset(300, 300) }), TweenService:Create(ws, info, { Transparency = 1 })
-        a:Play(); b:Play()
-        waveTweens[#waveTweens + 1] = a; waveTweens[#waveTweens + 1] = b
+        TweenService:Create(w, info, { Size = UDim2.fromOffset(280, 280) }):Play()
+        TweenService:Create(ws, info, { Transparency = 1 }):Play()
     end
-
-    -- gyroscope: three tilted pill rings spinning at different speeds
-    local rings = {}
-    for i = 1, 3 do
-        local f = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(176, 62),
-            BackgroundTransparency = 1, Rotation = (i - 1) * 60, ZIndex = 2, Parent = core,
-        })
-        corner(f, 500)
-        local st = create("UIStroke", { Thickness = 1.4, Color = WHITE, Transparency = 1, Parent = f })
-        rings[i] = { f = f, s = st, base = (i - 1) * 60, sp = (i % 2 == 0 and -1 or 1) * (26 + i * 12) }
-    end
-
-    local disc = create("Frame", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(92, 92),
-        BackgroundColor3 = Color3.fromRGB(10, 10, 12), BackgroundTransparency = 0.1, BorderSizePixel = 0, ZIndex = 3, Parent = core,
-    })
-    corner(disc, 46)
-    local rs = create("UIStroke", { Thickness = 3, Color = WHITE, Parent = disc })
-    local rg = gradient(rs, "GlowGrad")
-    local pulse = TweenService:Create(disc, TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.fromOffset(100, 100) })
-    pulse:Play()
-    local letter = create("TextLabel", {
-        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
-        ZIndex = 4, Text = glyphs[1] and glyphs[1]:upper() or "Y", TextSize = 44, Font = Enum.Font.GothamBlack, Parent = disc,
-    })
-    bind(letter, "TextColor3", "Accent")
 
     local dots = {}
     for i = 1, 3 do
         local d = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Size = UDim2.fromOffset(i == 1 and 9 or 6, i == 1 and 9 or 6),
-            BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 5, Parent = core,
+            BackgroundColor3 = WHITE, BorderSizePixel = 0, BackgroundTransparency = i == 1 and 0 or 0.4, ZIndex = 203, Parent = outer,
         })
         corner(d, 5)
         dots[i] = d
     end
 
-    ---------------------------------------------------------------- text
-    local titlePos = UDim2.new(.5, 0, .5, 40)
-    local function titleLabel(color, z)
-        return create("TextLabel", {
-            BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = titlePos, Size = UDim2.fromOffset(440, 40),
-            Text = "", TextSize = 34, Font = Enum.Font.GothamBlack, TextColor3 = color, ZIndex = z, Parent = stage,
-        })
-    end
-    local gR = titleLabel(Color3.fromRGB(255, 40, 90), 4); gR.TextTransparency = 1
-    local gC = titleLabel(Color3.fromRGB(40, 230, 255), 4); gC.TextTransparency = 1
-    local title = titleLabel(WHITE, 5)
+    local letter = create("TextLabel", {
+        AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+        ZIndex = 202, Text = (o.Title or "N"):sub(1, 1):upper(), TextSize = 46, Font = Enum.Font.GothamBlack, Parent = ring,
+    })
+    bind(letter, "TextColor3", "Accent")
+
+    local titleStr = o.Title or "YQANTG"
+    local title = create("TextLabel", {
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 28),
+        Size = UDim2.fromOffset(340, 36), Text = titleStr, TextSize = 30, Font = Enum.Font.GothamBlack,
+        MaxVisibleGraphemes = 0, ZIndex = 201, TextColor3 = WHITE, Parent = root,
+    })
     local tg = create("UIGradient", { Parent = title })
     bind(tg, "Color", "TextGrad")
 
-    local subPos = UDim2.new(.5, 0, .5, 84)
     local sub = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = subPos + UDim2.fromOffset(0, 10),
-        Size = UDim2.fromOffset(440, 16), Text = (o.Subtitle or ""):upper(), TextSize = 11, TextTransparency = 1,
-        Font = Enum.Font.GothamMedium, ZIndex = 5, Parent = stage,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 64),
+        Size = UDim2.fromOffset(340, 16), Text = o.Subtitle or "", TextSize = 12, TextTransparency = 1,
+        Font = Enum.Font.Gotham, ZIndex = 201, Parent = root,
     })
     bind(sub, "TextColor3", "SubText")
     local stepL = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 112),
-        Size = UDim2.fromOffset(300, 14), Text = "", TextSize = 11, Font = Enum.Font.Code, ZIndex = 5, Parent = stage,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 90),
+        Size = UDim2.fromOffset(340, 16), Text = "", TextSize = 11, Font = Enum.Font.Code, ZIndex = 201, Parent = root,
     })
     bind(stepL, "TextColor3", "Accent")
 
-    -- segmented progress bar
-    local NSEG = 28
-    local holder = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 140), Size = UDim2.fromOffset(277, 6), BackgroundTransparency = 1, ZIndex = 5, Parent = stage })
-    local segs = {}
-    for i = 1, NSEG do
-        local s = create("Frame", { Position = UDim2.fromOffset((i - 1) * 10, 0), Size = UDim2.fromOffset(7, 6), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 5, Parent = holder })
-        bind(s, "BackgroundColor3", "Accent")
-        corner(s, 1)
-        segs[i] = s
-    end
+    local track = create("Frame", { AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 118), Size = UDim2.fromOffset(280, 6), BorderSizePixel = 0, ZIndex = 201, Parent = root })
+    bind(track, "BackgroundColor3", "Element")
+    corner(track, 3)
+    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 202, Parent = track })
+    corner(fill, 3)
+    gradient(fill, "AccentGrad")
     local pct = create("TextLabel", {
-        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 152),
-        Size = UDim2.fromOffset(277, 14), Text = "0%", TextSize = 11, Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 5, Parent = stage,
+        BackgroundTransparency = 1, AnchorPoint = Vector2.new(.5, 0), Position = UDim2.new(.5, 0, .5, 130),
+        Size = UDim2.fromOffset(280, 16), Text = "0%", TextSize = 11, Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 201, Parent = root,
     })
     bind(pct, "TextColor3", "SubText")
 
-    ---------------------------------------------------------------- per-frame animation
-    local GLYPHS = "01#$%&@<>/\\|=+*"
-    local function scramble(n)
-        local out = {}
-        for i, c in ipairs(glyphs) do
-            if i <= n or c == " " then out[i] = c
-            else local r = math.random(#GLYPHS); out[i] = GLYPHS:sub(r, r) end
-        end
-        return table.concat(out)
-    end
-    local function setTitle(txt, glitch)
-        title.Text, gR.Text, gC.Text = txt, txt, txt
-        if glitch then
-            gR.Position = UDim2.new(.5, -math.random(2, 6), .5, 40 + math.random(-2, 2))
-            gC.Position = UDim2.new(.5, math.random(2, 6), .5, 40 + math.random(-2, 2))
-            gR.TextTransparency, gC.TextTransparency = 0.4, 0.4
-        else
-            gR.Position, gC.Position = titlePos, titlePos
-            gR.TextTransparency, gC.TextTransparency = 1, 1
-        end
-    end
-
     local t0 = os.clock()
-    local exiting, revealed = false, false
-    local warp, warpTo = 1, 1
-    local nextGlitch, glitchEnd, memT = 2.4, 0, 0
-    local spin = RunService.Heartbeat:Connect(function(dt)
+    local exiting = false
+    local spin = RunService.Heartbeat:Connect(function()
         local t = os.clock() - t0
         rg.Rotation = (t * 200) % 360
         tg.Offset = Vector2.new(math.sin(t * 1.6) * 0.6, 0)
         bgG.Rotation = 45 + math.sin(t * 0.7) * 20
-
-        warp = warp + (warpTo - warp) * math.min(1, dt * 5)
-        for _, s in ipairs(streaks) do
-            s.r = s.r + s.v * dt * warp
-            if s.r > rmax then s.r = 30 + math.random() * 40 end
-            s.f.Position = UDim2.new(.5, math.cos(s.a) * s.r, .5, CY + math.sin(s.a) * s.r)
-            s.f.Size = UDim2.fromOffset(3 + s.r * 0.06 * warp, s.th)
-            if not exiting then s.f.BackgroundTransparency = 1 - math.clamp(s.r / 300, 0, 1) * s.al end
-        end
-
-        local sy = (t * 0.38) % 1.3 - 0.15
-        scan.Position = UDim2.new(0, 0, sy, 0)
-        band.Position = UDim2.new(0, 0, sy, -44)
-
-        for _, r in ipairs(rings) do r.f.Rotation = r.base + t * r.sp end
+        -- 3D orbits: tilted ellipses, depth = size + opacity + draw order
         for i, d in ipairs(dots) do
             local a = t * (2.4 - i * 0.4) + i * 2.1
             local tilt, phi = 0.5 + i * 0.45, i * 1.25
-            local ox, oy = math.cos(a) * 88, math.sin(a) * 88 * math.sin(tilt)
+            local ox, oy = math.cos(a) * 80, math.sin(a) * 80 * math.sin(tilt)
             local z = math.sin(a) * math.cos(tilt)
             d.Position = UDim2.new(.5, ox * math.cos(phi) - oy * math.sin(phi), .5, ox * math.sin(phi) + oy * math.cos(phi))
             local sz = (i == 1 and 9 or 6) * (1 + z * 0.55)
             d.Size = UDim2.fromOffset(sz, sz)
-            d.ZIndex = z > 0 and 5 or 0
+            d.ZIndex = z > 0 and 203 or 199
             if not exiting then d.BackgroundTransparency = math.clamp(0.4 - z * 0.4, 0, 0.9) end
-        end
-
-        if not exiting then
-            memT = memT + dt
-            if memT > 0.1 then memT = 0; memL.Text = string.format("MEM 0x%04X", math.random(0, 65535)) end
-            sysL.TextTransparency = 0.25 + 0.4 * (math.sin(t * 5) > 0 and 1 or 0)
-            if revealed then
-                if t >= nextGlitch then glitchEnd = t + 0.12; nextGlitch = t + 1.4 + math.random() * 1.6 end
-                if t < glitchEnd then
-                    gR.Position = UDim2.new(.5, -math.random(2, 6), .5, 40 + math.random(-2, 2))
-                    gC.Position = UDim2.new(.5, math.random(2, 6), .5, 40 + math.random(-2, 2))
-                    gR.TextTransparency, gC.TextTransparency = 0.35, 0.35
-                    title.Position = UDim2.new(.5, math.random(-2, 2), .5, 40)
-                else
-                    gR.TextTransparency, gC.TextTransparency = 1, 1
-                    title.Position = titlePos
-                end
-            end
         end
     end)
 
-    ---------------------------------------------------------------- intro choreography
+    -- title typewriter + subtitle fade
     task.spawn(function()
-        tween(coreS, 0.9, { Scale = 1 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-        for i, r in ipairs(rings) do task.delay(0.15 * i, function() tween(r.s, 0.5, { Transparency = 0.3 }) end) end
-        for _, b in ipairs(brackets) do tween(b, 0.6, { BackgroundTransparency = 0.5 }) end
-        task.wait(0.4)
-        for n = 0, #glyphs do
-            for _ = 1, 3 do
-                if exiting then return end
-                setTitle(scramble(n), true)
-                task.wait(0.025)
-            end
-        end
-        if exiting then return end
-        setTitle(titleStr, false)
-        revealed = true
-        tween(sub, 0.6, { TextTransparency = 0, Position = subPos })
+        for n = 1, #titleStr do title.MaxVisibleGraphemes = n; task.wait(0.05) end
+        tween(sub, 0.5, { TextTransparency = 0 })
     end)
 
     local lastStep = 0
@@ -1434,11 +1283,7 @@ function Yqantg:Splash(o)
     while true do
         local a = math.clamp((os.clock() - start) / total, 0, 1)
         local e = 1 - (1 - a) ^ 2
-        local lit = e * NSEG
-        for i, s in ipairs(segs) do
-            local d = lit - (i - 1)
-            s.BackgroundTransparency = d >= 1 and 0.05 or (d > 0 and (0.88 - d * 0.83) or 0.88)
-        end
+        fill.Size = UDim2.fromScale(e, 1)
         pct.Text = math.floor(e * 100) .. "%"
         local idx = math.clamp(math.floor(a * #steps) + 1, 1, #steps)
         if idx ~= lastStep then
@@ -1458,36 +1303,18 @@ function Yqantg:Splash(o)
         RunService.Heartbeat:Wait()
     end
     pct.Text = "100%"
-    task.wait(0.2)
+    task.wait(0.3)
 
-    ---------------------------------------------------------------- exit: warp jump -> shockwave -> flash
     pulse:Cancel()
-    for _, tw in ipairs(waveTweens) do tw:Cancel() end
-    warpTo = 10
-    tween(coreS, 0.55, { Scale = 1.5 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-    task.wait(0.5)
     exiting = true
+    tween(outer, 0.55, { Size = UDim2.fromOffset(460, 460) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tween(root, 0.5, { BackgroundTransparency = 1 })
     for _, d in ipairs(root:GetDescendants()) do
         if d:IsA("TextLabel") then tween(d, 0.45, { TextTransparency = 1 })
         elseif d:IsA("Frame") then tween(d, 0.45, { BackgroundTransparency = 1 })
         elseif d:IsA("UIStroke") then tween(d, 0.45, { Transparency = 1 }) end
     end
-    for i = 1, 3 do
-        local w = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.new(.5, 0, .5, CY), Size = UDim2.fromOffset(60, 60),
-            BackgroundTransparency = 1, ZIndex = 6, Parent = stage,
-        })
-        corner(w, 500)
-        local ws = create("UIStroke", { Thickness = 2.5, Color = WHITE, Transparency = 0.1, Parent = w })
-        task.delay((i - 1) * 0.07, function()
-            tween(w, 0.7, { Size = UDim2.fromOffset(1000, 1000) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-            tween(ws, 0.7, { Transparency = 1 })
-        end)
-    end
-    local flash = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 10, Parent = stage })
-    tween(flash, 0.5, { BackgroundTransparency = 1 })
-    task.wait(0.75)
+    task.wait(0.55)
     spin:Disconnect()
     root:Destroy()
 end
@@ -2255,7 +2082,7 @@ function Section:AddDropdown(o)
                 it[2].TextTransparency = 1
                 it[2].Position = UDim2.fromOffset(-8, 0)
                 task.delay(0.03 * n, function()
-                    tween(it[2], 0.3, { TextTransparency = 0, Position = UDim2.fromOffset(8, 0) }, Enum.EasingStyle.Quint)
+                    tween(it[2], 0.3, { TextTransparency = 0, Position = UDim2.fromOffset(8, 0) }, Enum.EasingStyle.Back)
                 end)
             end
         end
@@ -2268,7 +2095,7 @@ function Section:AddDropdown(o)
         tok = tok + 1
         local my = tok
         local sc = dsec.Tab.Window._scaleObj and dsec.Tab.Window._scaleObj.Scale or 1
-        tween(arrow, 0.3, { Rotation = state and 180 or 0 }, Enum.EasingStyle.Quint)
+        tween(arrow, 0.3, { Rotation = state and 180 or 0 }, Enum.EasingStyle.Back)
         wrap.ClipsDescendants = true
         if state then
             local h = (search and 28 or 0) + scroll.Size.Y.Offset + 6
@@ -2393,11 +2220,11 @@ function Section:AddSegment(o)
     local function render(anim)
         local idx = 1
         for i, e in ipairs(btns) do if e[2] == obj.Value then idx = i end end
-        tween(pill, anim and 0.45 or 0, { Position = UDim2.new((idx - 1) / n, 2, 0, 2) }, Enum.EasingStyle.Quint)
+        tween(pill, anim and 0.45 or 0, { Position = UDim2.new((idx - 1) / n, 2, 0, 2) }, Enum.EasingStyle.Back)
         if anim then
             -- squash & stretch while travelling
             pill.Size = UDim2.new(1 / n, 4, 1, -4)
-            tween(pill, 0.4, { Size = UDim2.new(1 / n, -4, 1, -4) }, Enum.EasingStyle.Quint)
+            tween(pill, 0.4, { Size = UDim2.new(1 / n, -4, 1, -4) }, Enum.EasingStyle.Back)
         end
         for i, e in ipairs(btns) do
             tween(e[1], 0.25, { TextColor3 = i == idx and Color3.fromRGB(10, 10, 12) or resolve("SubText") })
@@ -3223,12 +3050,12 @@ function Tab:_cascade(delay0)
     local my = self._ctok
     local list = self._secs or {}
     for i, sc in ipairs(list) do
-        sc.Scale = 0.95
-        task.delay((delay0 or 0) + (i - 1) * 0.045, function()
-            if my == self._ctok then tween(sc, 0.55, { Scale = 1 }, Enum.EasingStyle.Quint) end
+        sc.Scale = 0.9
+        task.delay((delay0 or 0) + (i - 1) * 0.07, function()
+            if my == self._ctok then tween(sc, 0.6, { Scale = 1 }, Enum.EasingStyle.Back) end
         end)
     end
-    task.delay((delay0 or 0) + #list * 0.045 + 0.7, function()
+    task.delay((delay0 or 0) + #list * 0.07 + 0.8, function()
         if my == self._ctok then for _, sc in ipairs(list) do sc.Scale = 1 end end
     end)
 end
@@ -3391,44 +3218,14 @@ function Yqantg:CreateWindow(cfg)
     corner(bgImg, 12)
     local mainSheen = sheen(Main, 65, 150)
 
-    -- back face of the card: shown while the window turns edge-on during open / close
-    do
-        local t = cfg.Title or "Y"
-        local ch = t:sub(1, (utf8.offset(t, 2) or (#t + 1)) - 1):upper()
-        F.cover = create("Frame", { Name = "FlipCover", Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 100, Visible = false, Parent = Main })
-        bind(F.cover, "BackgroundColor3", "Bg")
-        corner(F.cover, 12)
-        F.coverG = create("UIGradient", { Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(105, 105, 115)), Parent = F.cover })
-        F.coverTxt = create("TextLabel", {
-            BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = ch ~= "" and ch or "Y",
-            TextSize = 90, Font = Enum.Font.GothamBlack, ZIndex = 101, Parent = F.cover,
-        })
-        bind(F.coverTxt, "TextColor3", "Accent")
-        F.coverShine = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(0, .5), Size = UDim2.new(0, 70, 1.8, 0),
-            Rotation = 16, BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 102, Parent = F.cover,
-        })
-        create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.55), NumberSequenceKeypoint.new(1, 1) }), Parent = F.coverShine })
-        -- shading: the face darkens as it turns away from the viewer (both faces)
-        F.shade = create("Frame", { Name = "FlipShade", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 110, Visible = false, Parent = Main })
-        corner(F.shade, 12)
-    end
-
     -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
     local introV = create("NumberValue", { Value = 1, Parent = Root })
     local liftV  = create("NumberValue", { Value = 0, Parent = Root })
-    -- F = 3D flip state (kept in one table to stay under Lua's 200-locals limit)
-    local F = {
-        side = 1, on = false,
-        flipV = create("NumberValue", { Value = 1, Parent = Root }),   -- 0 = card edge-on, 1 = fully open
-        levV  = create("NumberValue", { Value = 0, Parent = Root }),   -- levitation while minimized
-    }
     local par = { x = 0, y = 0 }
     local function applyDepth()
-        local k, f, lf = Yqantg.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value + F.levV.Value
-        local fx = (F.th or 0) * 18 * F.side                 -- thickness peeks out of the receding edge
-        slab.Position  = UDim2.fromOffset(-par.x * 5 * k + fx * 0.5, (7 + lf) * k * f)
-        slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k + fx, (13 + lf * 1.8) * k * f)
+        local k, f, lf = Yqantg.Depth, math.clamp(introV.Value, 0, 1.25), liftV.Value
+        slab.Position  = UDim2.fromOffset(-par.x * 5 * k, (7 + lf) * k * f)
+        slab2.Position = UDim2.fromOffset(8 - par.x * 10 * k, (13 + lf * 1.8) * k * f)
         slab.BackgroundTransparency  = math.clamp(1 - f, 0, 1)
         slab2.BackgroundTransparency = math.clamp(1 - f * 0.6, 0, 1)
         shNear.Position = UDim2.new(.5, -par.x * 8 * k, .5, (5 + lf * 0.6 - par.y * 4) * k)
@@ -4207,17 +4004,17 @@ function Yqantg:CreateWindow(cfg)
         local my = ptok
         if state then
             panel.Size = UDim2.fromOffset(PW, math.clamp(fs.Y.Offset - TOP - 22, 160, 430))
-            panel.GroupTransparency = 1; pscale.Scale = 0.92
+            panel.GroupTransparency = 1; pscale.Scale = 0.55
             panel.Position = UDim2.new(.5, 0, 0, TOP - 6)
             panel.Visible = true; scrim.Visible = true
             scroll.CanvasPosition = Vector2.new(0, 0)
-            tween(panel, 0.3, { GroupTransparency = 0 }, Enum.EasingStyle.Sine)
-            tween(panel, 0.5, { Position = UDim2.new(.5, 0, 0, TOP + 10) }, Enum.EasingStyle.Quint)
-            tween(pscale, 0.5, { Scale = 1 }, Enum.EasingStyle.Quint)
+            tween(panel, 0.25, { GroupTransparency = 0 })
+            tween(panel, 0.5, { Position = UDim2.new(.5, 0, 0, TOP + 10) }, Enum.EasingStyle.Back)
+            tween(pscale, 0.5, { Scale = 1 }, Enum.EasingStyle.Back)
         else
             scrim.Visible = false
-            tween(panel, 0.18, { GroupTransparency = 1 }, Enum.EasingStyle.Sine)
-            tween(pscale, 0.2, { Scale = 0.94 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+            tween(panel, 0.18, { GroupTransparency = 1 })
+            tween(pscale, 0.2, { Scale = 0.85 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
             tween(panel, 0.2, { Position = UDim2.new(.5, 0, 0, TOP) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
             task.delay(0.21, function() if my == ptok then panel.Visible = false end end)
         end
@@ -4235,94 +4032,33 @@ function Yqantg:CreateWindow(cfg)
     local restPos
     local tok = 0
 
-    -- 3D card flip: the window turns about its vertical axis (width -> edge-on), grows a little
-    -- while turned (perspective), shows a shaded back face with a travelling shine, and its
-    -- slab layers peek out of the receding edge. Driven entirely by F.flipV.
-    F.apply = function()
-        -- p: 0..1 -> angle: pi (back face, full width) .. 0 (front face, full width); pi/2 = edge-on
-        local p = F.flipV.Value
-        local th = (1 - p) * math.pi
-        local sn = math.sin(th)
-        local w = math.abs(math.cos(th))
-        local ww = 0.02 + 0.98 * w
-        F.th = sn
-        local bs = Window.Minimized and UDim2.fromOffset(fs.X.Offset, TOP) or fs
-        Root.Size = UDim2.new(bs.X.Scale * ww, bs.X.Offset * ww, bs.Y.Scale, bs.Y.Offset)
-        local r = F.rest
-        Root.Position = UDim2.new(r.X.Scale, r.X.Offset, r.Y.Scale, r.Y.Offset - sn * 14)
-        Root.Rotation = F.side * sn * 4
-        scale.Scale = Window._scale * (1 + sn * 0.14)               -- perspective: nearer while turning
-        local back = th > math.pi / 2
-        F.cover.Visible = back
-        F.cover.BackgroundTransparency = 0
-        F.coverTxt.TextTransparency = 0
-        F.coverShine.Position = UDim2.new(1 - w, 0, .5, 0)
-        F.coverG.Rotation = F.side > 0 and 0 or 180
-        F.shade.Visible = sn > 0.02
-        F.shade.BackgroundTransparency = 1 - 0.5 * sn
-    end
-    F.flipV.Changed:Connect(function() if F.on then F.apply() end end)
-
-    -- expanding light ring behind the window (landing impact)
-    F.shock = function(th)
-        local r = create("Frame", {
-            AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 1, ZIndex = 0, Parent = Root,
-        })
-        corner(r, 14)
-        local st = create("UIStroke", { Thickness = th or 2.5, Color = WHITE, Transparency = 0.15, Parent = r })
-        gradient(st, "GlowGrad")
-        tween(r, 0.75, { Size = UDim2.new(1, 110, 1, 80) }, Enum.EasingStyle.Quint)
-        tween(st, 0.75, { Transparency = 1 })
-        task.delay(0.8, function() r:Destroy() end)
-    end
-    local function baseSize() return Window.Minimized and UDim2.fromOffset(fs.X.Offset, TOP) or fs end
-
     local function intro()
         tok = tok + 1
         local my = tok
-        if not F.on then restPos = Root.Position end
         restPos = restPos or Root.Position
-        F.rest = restPos
-        F.side = 1
-        local fresh = not F.on
-        F.on = true
         Root.Visible = true
-        Main.GroupTransparency = 0
-        if fresh then
-            F.flipV.Value = 0                 -- starts edge-on (apply runs through Changed)
-            introV.Value = 0
-            glow.Thickness = 0.5
-            for _, p in ipairs(popItems) do p.Scale = 0 end
-            title.TextTransparency = 1; subtitle.TextTransparency = 1
-        end
-        Main.GroupTransparency = fresh and 1 or Main.GroupTransparency
-        tween(Main, 0.25, { GroupTransparency = 0 }, Enum.EasingStyle.Sine)
-        tween(F.flipV, 1.0, { Value = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-        task.delay(0.2, function() if my == tok then tween(introV, 0.7, { Value = 1 }, Enum.EasingStyle.Quint) end end)
-        tween(glow, 0.9, { Thickness = 2 })
+        -- start state: low, tilted, small, transparent, stack collapsed
+        Root.Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 60)
+        Root.Rotation = -9
+        scale.Scale = Window._scale * 0.78
+        Main.GroupTransparency = 1
+        introV.Value = 0
+        glow.Thickness = 0.5
+        for _, p in ipairs(popItems) do p.Scale = 0 end
+        title.TextTransparency = 1; subtitle.TextTransparency = 1
+        -- fly in
+        tween(Main, 0.45, { GroupTransparency = 0 }, Enum.EasingStyle.Quad)
+        tween(scale, 0.75, { Scale = Window._scale }, Enum.EasingStyle.Back)
+        tween(Root, 0.8, { Rotation = 0, Position = restPos }, Enum.EasingStyle.Back)
+        tween(introV, 0.9, { Value = 1 }, Enum.EasingStyle.Back)
+        tween(glow, 0.8, { Thickness = 2 })
         Yqantg:_syncBlur()
         Yqantg:_sfx("Open")
-        -- landing: slabs slam down, light ring bursts out
-        task.delay(0.86, function()
-            if my ~= tok then return end
-            liftV.Value = 14
-            tween(liftV, 0.7, { Value = 0 }, Enum.EasingStyle.Quint)
-            F.shock(2.5)
-        end)
-        task.delay(1.05, function()
-            if my ~= tok then return end
-            F.on = false
-            F.th = 0
-            Root.Size = baseSize(); Root.Position = restPos; Root.Rotation = 0
-            scale.Scale = Window._scale
-            F.cover.Visible = false; F.shade.Visible = false
-        end)
-        -- staggered pop-in of top bar / tabs / sections once the face is turned
+        -- staggered pop-in of top bar / tabs / sections
         for i, p in ipairs(popItems) do
-            task.delay(0.5 + i * 0.045, function() if my == tok then tween(p, 0.55, { Scale = 1 }, Enum.EasingStyle.Quint) end end)
+            task.delay(0.22 + i * 0.06, function() if my == tok then tween(p, 0.5, { Scale = 1 }, Enum.EasingStyle.Back) end end)
         end
-        task.delay(0.65, function()
+        task.delay(0.3, function()
             if my == tok then
                 tween(title, 0.4, { TextTransparency = 0 }); tween(subtitle, 0.5, { TextTransparency = 0 })
             end
@@ -4332,11 +4068,11 @@ function Yqantg:CreateWindow(cfg)
             if my ~= tok then return end
             for i, t in ipairs(Window.Tabs) do
                 t.Label.TextTransparency = 1
-                task.delay(0.6 + i * 0.045, function()
+                task.delay(0.3 + i * 0.06, function()
                     if my == tok and t.Label.Parent then tween(t.Label, 0.4, { TextTransparency = 0 }) end
                 end)
             end
-            if Window.ActiveTab then Window.ActiveTab:_cascade(0.55) end
+            if Window.ActiveTab then Window.ActiveTab:_cascade(0.3) end
         end)
     end
 
@@ -4344,32 +4080,24 @@ function Yqantg:CreateWindow(cfg)
         Yqantg:_lock("hover" .. tostring(Window), false)
         tok = tok + 1
         local my = tok
-        if not F.on then restPos = Root.Position end
-        F.rest = restPos
-        F.side = -1
-        F.on = true
+        restPos = Root.Position
         setPanel(false)
-        tween(F.flipV, 0.8, { Value = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-        task.delay(0.55, function()
-            if my == tok then
-                tween(introV, 0.3, { Value = 0 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-                tween(Main, 0.25, { GroupTransparency = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-            end
-        end)
-        tween(glow, 0.4, { Thickness = 0.5 })
+        tween(Main, 0.32, { GroupTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        tween(scale, 0.38, { Scale = Window._scale * 0.82 }, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        tween(Root, 0.38, {
+            Rotation = 7,
+            Position = UDim2.new(restPos.X.Scale, restPos.X.Offset, restPos.Y.Scale, restPos.Y.Offset + 50),
+        }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(introV, 0.32, { Value = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        tween(glow, 0.3, { Thickness = 0.5 })
         Yqantg:_syncBlur()
         Yqantg:_sfx("Close")
-        task.delay(0.86, function()
+        task.delay(0.42, function()
             if my ~= tok then return end
             Root.Visible = false
-            F.on = false
-            F.th = 0
-            Main.GroupTransparency = 0
-            F.flipV.Value = 1
-            Root.Size = baseSize(); Root.Position = restPos; Root.Rotation = 0
+            Root.Rotation = 0
+            Root.Position = restPos
             scale.Scale = Window._scale
-            F.cover.Visible = false; F.shade.Visible = false
-            liftV.Value = 0
         end)
     end
 
@@ -4380,13 +4108,12 @@ function Yqantg:CreateWindow(cfg)
         if state then intro() else outro() end
     end
 
-    -- minimize: the card lifts off, folds down to its title bar and hovers (levitates, shadow
-    -- breathing, drag it anywhere); restore: it unfolds back to the exact spot and slams down
+    -- minimize: collapses to a floating top bar (bobs in the air, drag it anywhere);
+    -- restore: the window flies back to the exact spot it had before minimizing
     local savedPos
     animate(Main, function(t)
         Main.Position = UDim2.fromOffset(0, math.sin(t * 2.2) * 3)
         Main.Rotation = math.sin(t * 1.6) * 1.4
-        F.levV.Value = 6 + math.sin(t * 2.2) * 3
     end, function() return Window.Minimized end)
 
     function Window:Minimize()
@@ -4395,44 +4122,29 @@ function Yqantg:CreateWindow(cfg)
         setPanel(false)
         Yqantg:_sfx("Click")
         grip.Visible = not Window.Minimized
-        F.mtok = (F.mtok or 0) + 1
-        local my = F.mtok
         if Window.Minimized then
             savedPos = Root.Position
-            tween(liftV, 0.3, { Value = 18 }, Enum.EasingStyle.Cubic)
-            tween(glow, 0.25, { Thickness = 4 })
-            tween(Body, 0.22, { GroupTransparency = 1 })
-            task.delay(0.16, function()
-                if my == F.mtok then
-                    tween(Root, 0.5, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut)
+            tween(liftV, 0.25, { Value = 12 })
+            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Bounce) end)
+            tween(Body, 0.2, { GroupTransparency = 1 })
+            task.delay(0.12, function()
+                if Window.Minimized then
+                    tween(Root, 0.5, { Size = UDim2.fromOffset(fs.X.Offset, TOP) }, Enum.EasingStyle.Back)
                 end
             end)
-            task.delay(0.22, function() if my == F.mtok and Window.Minimized then Body.Visible = false end end)
-            task.delay(0.6, function()
-                if my == F.mtok and Window.Minimized then
-                    tween(liftV, 0.5, { Value = 0 }, Enum.EasingStyle.Sine)
-                    tween(glow, 0.4, { Thickness = 2 })
-                end
-            end)
+            task.delay(0.2, function() if Window.Minimized then Body.Visible = false end end)
         else
             Body.Visible = true
-            Root.Rotation = 0
-            tween(F.levV, 0.4, { Value = 0 }, Enum.EasingStyle.Quad)
+            Root.Rotation = -6
             tween(Main, 0.4, { Position = UDim2.fromOffset(0, 0), Rotation = 0 }, Enum.EasingStyle.Quad)
-            tween(liftV, 0.3, { Value = 22 }, Enum.EasingStyle.Cubic)
-            tween(glow, 0.3, { Thickness = 4 })
-            tween(Root, 0.6, { Size = fs, Position = savedPos or Root.Position, Rotation = 0 }, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+            tween(liftV, 0.25, { Value = 14 })
+            task.delay(0.3, function() tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Bounce) end)
+            -- float back to the old place while growing back to full size
+            tween(Root, 0.75, { Size = fs, Position = savedPos or Root.Position, Rotation = 0 }, Enum.EasingStyle.Back)
             task.delay(0.3, function()
-                if my == F.mtok and not Window.Minimized then
+                if not Window.Minimized then
                     tween(Body, 0.35, { GroupTransparency = 0 })
                     if Window.ActiveTab then Window.ActiveTab:_cascade(0) end
-                end
-            end)
-            task.delay(0.58, function()
-                if my == F.mtok and not Window.Minimized then
-                    tween(liftV, 0.6, { Value = 0 }, Enum.EasingStyle.Quint)   -- slam
-                    tween(glow, 0.5, { Thickness = 2 })
-                    F.shock(2.5)
                 end
             end)
         end
@@ -4443,7 +4155,7 @@ function Yqantg:CreateWindow(cfg)
         Window._closing = true
         Window.Visible = false
         outro()
-        task.delay(0.95, function() Window:Destroy() end)
+        task.delay(0.5, function() Window:Destroy() end)
     end
 
     function Window:Destroy()
@@ -4547,17 +4259,11 @@ function Yqantg:CreateWindow(cfg)
         local moved = 0
         makeDraggable(orb, orb, nil, function(d) moved = math.max(moved, math.abs(d.X) + math.abs(d.Y)) end, "full")
         orb.InputBegan:Connect(function(i) if isPress(i) then moved = 0 end end)
+        local spinT = 0
         orb.MouseButton1Click:Connect(function()
             if moved < 8 then
-                -- coin flip: the orb turns edge-on and back, then the window flips
-                local base, w = orb.Position, orb.Size.X.Offset
-                tween(orb, 0.18, {
-                    Size = UDim2.fromOffset(4, orb.Size.Y.Offset),
-                    Position = UDim2.new(base.X.Scale, base.X.Offset + (w - 4) / 2, base.Y.Scale, base.Y.Offset),
-                }, Enum.EasingStyle.Cubic, Enum.EasingDirection.In)
-                task.delay(0.18, function()
-                    if orb.Parent then tween(orb, 0.4, { Size = UDim2.fromOffset(w, orb.Size.Y.Offset), Position = base }, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out) end
-                end)
+                spinT = spinT + 360
+                tween(orb, 0.7, { Rotation = spinT }, Enum.EasingStyle.Back)
                 Window:Toggle()
             end
         end)
@@ -4579,17 +4285,17 @@ function Yqantg:CreateWindow(cfg)
             if prev then
                 prev._tok = (prev._tok or 0) + 1
                 local my = prev._tok
-                tween(prev.Group, 0.2, { GroupTransparency = 1, Position = UDim2.fromOffset(-dir * 22, 0) }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
-                task.delay(0.22, function()
+                tween(prev.Group, 0.22, { GroupTransparency = 1, Position = UDim2.fromOffset(-dir * 44, 0) }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                task.delay(0.24, function()
                     if prev._tok == my and Window.ActiveTab ~= prev then prev.Group.Visible = false end
                 end)
             end
             tab._tok = (tab._tok or 0) + 1
-            tab.Group.Position = UDim2.fromOffset(dir * 22, 0)
+            tab.Group.Position = UDim2.fromOffset(dir * 44, 0)
             tab.Group.GroupTransparency = 1
             tab.Group.Visible = true
-            tween(tab.Group, 0.45, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Quint)
-            tab:_cascade(0.04)
+            tween(tab.Group, 0.5, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Quint)
+            tab:_cascade(0.05)
         else
             tab.Group.Visible = true
         end
@@ -4602,10 +4308,10 @@ function Yqantg:CreateWindow(cfg)
                     indicator.Position = UDim2.fromOffset(6, y)
                     indicator.Visible = true
                 else
-                    tween(indicator, 0.42, { Position = UDim2.fromOffset(6, y) }, Enum.EasingStyle.Quint)
-                    -- gentle stretch while travelling, then settle (no overshoot)
-                    tween(indicator, 0.16, { Size = UDim2.new(1, -12, 0, 38) }, Enum.EasingStyle.Sine)
-                    task.delay(0.16, function() tween(indicator, 0.32, { Size = UDim2.new(1, -12, 0, 32) }, Enum.EasingStyle.Quint) end)
+                    tween(indicator, 0.5, { Position = UDim2.fromOffset(6, y) }, Enum.EasingStyle.Back)
+                    -- stretch while travelling, then settle
+                    tween(indicator, 0.14, { Size = UDim2.new(1, -12, 0, 42) }, Enum.EasingStyle.Quad)
+                    task.delay(0.14, function() tween(indicator, 0.4, { Size = UDim2.new(1, -12, 0, 32) }, Enum.EasingStyle.Back) end)
                 end
             end
         end)
