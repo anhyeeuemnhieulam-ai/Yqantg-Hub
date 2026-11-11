@@ -7,7 +7,7 @@
     NEW in 2.0 (3D edition)
       • Window = real depth stack: slab layers + soft shadows + mouse parallax
         + specular light that follows the cursor
-      • Full open / close choreography: rise + tilt + scale (Back easing)q,
+      • Full open / close choreography: rise + tilt + scale (Back easing),
         staggered top-bar / tab / section pop-in, backdrop blur, sound cues
       • Drag = window "lifts" off the surface, drop = bounce back
       • 3D keycap buttons (extruded base, press-down, cursor parallax label)
@@ -1262,9 +1262,10 @@ local function playIntro(self)
             BorderSizePixel = 0, Active = true, ZIndex = 200, Parent = g,
         })
         local function half(top)
+            -- oversized on every side (+600px) so it still covers the notch / safe-area strips
             local f = create("Frame", {
-                AnchorPoint = Vector2.new(0, top and 0 or 1), Position = UDim2.fromScale(0, top and 0 or 1),
-                Size = UDim2.fromScale(1, 0.5), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
+                AnchorPoint = Vector2.new(.5, top and 0 or 1), Position = UDim2.new(.5, 0, top and 0 or 1, top and -300 or 300),
+                Size = UDim2.new(1, 1200, 0.5, 300), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
                 BorderSizePixel = 0, ZIndex = 200, Parent = root,
             })
             create("UIGradient", {
@@ -1581,12 +1582,12 @@ local function playIntro(self)
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.new(0, 0, 0, 2),
             BackgroundColor3 = WHITE, BorderSizePixel = 0, ZIndex = 203, Parent = root,
         })
-        tween(seam, 0.4, { Size = UDim2.new(1, 0, 0, 2) }, Enum.EasingStyle.Quint)
+        tween(seam, 0.4, { Size = UDim2.new(1, 1200, 0, 2) }, Enum.EasingStyle.Quint)
         tween(content, 0.45, { GroupTransparency = 1 }, Enum.EasingStyle.Quad)
         task.wait(0.45)
 
-        tween(topH, 0.65, { Position = UDim2.fromScale(0, -0.5) }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-        tween(botH, 0.65, { Position = UDim2.fromScale(0, 1.5) }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        tween(topH, 0.65, { Position = UDim2.new(.5, 0, -0.5, -620) }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        tween(botH, 0.65, { Position = UDim2.new(.5, 0, 1.5, 620) }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         tween(seam, 0.5, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
         task.wait(0.7)
     end
