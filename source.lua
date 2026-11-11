@@ -2298,13 +2298,33 @@ function Section:AddKeybind(o)
     function obj:SetVisible(b) row.Visible = b end
 
     addTip(btn, o.Tooltip); pressDepth(btn, row)
-    btn.MouseButton1Click:Connect(function() Yqantg:_sfx("Click"); obj.Listening = true; render() end)
+    -- real key-capture (no TextBox): click -> "..." -> press a key to bind it
+    --   Esc = cancel · Backspace/Delete = clear · click elsewhere = cancel
+    local hovering, justBound = false, nil
+    btn.MouseEnter:Connect(function() hovering = true end)
+    btn.MouseLeave:Connect(function() hovering = false end)
+    btn.MouseButton1Click:Connect(function()
+        Yqantg:_sfx("Click")
+        obj.Listening = not obj.Listening
+        render()
+    end)
     btn.MouseButton1Down:Connect(function(x) ripple(row, x, self.Tab.Window._scaleObj) end)
     connect(UserInputService.InputBegan, function(i, gp)
         if obj.Listening then
-            if i.UserInputType == Enum.UserInputType.Keyboard then
+            local t = i.UserInputType
+            if t == Enum.UserInputType.Keyboard then
+                local k = i.KeyCode
                 obj.Listening = false
-                obj:Set(i.KeyCode == Enum.KeyCode.Escape and Enum.KeyCode.Unknown or i.KeyCode)
+                if k == Enum.KeyCode.Escape then
+                    render()                                   -- cancel, keep old key
+                elseif k == Enum.KeyCode.Backspace or k == Enum.KeyCode.Delete then
+                    obj:Set(Enum.KeyCode.Unknown)              -- clear
+                else
+                    justBound = k                              -- don't fire this key's release/press
+                    obj:Set(k)
+                end
+            elseif (t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch) and not hovering then
+                obj.Listening = false; render()                -- clicked outside -> cancel
             end
             return
         end
@@ -2313,7 +2333,8 @@ function Section:AddKeybind(o)
         end
     end)
     connect(UserInputService.InputEnded, function(i)
-        if o.Hold and obj.Value ~= Enum.KeyCode.Unknown and i.KeyCode == obj.Value and o.Callback then
+        if justBound and i.KeyCode == justBound then justBound = nil; return end
+        if o.Hold and not obj.Listening and obj.Value ~= Enum.KeyCode.Unknown and i.KeyCode == obj.Value and o.Callback then
             task.spawn(o.Callback, false)
         end
     end)
