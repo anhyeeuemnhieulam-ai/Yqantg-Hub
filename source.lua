@@ -1007,8 +1007,9 @@ function Yqantg:_ensureGui()
     local g = create("ScreenGui", {
         Name = "YqantgUI_" .. HttpService:GenerateGUID(false):sub(1, 6),
         ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Archivable = false,  -- blocks SaveInstance / :Clone() ripping the built UI
     })
+    g.DescendantAdded:Connect(function(d) pcall(function() d.Archivable = false end) end)  -- every element we build stays unclonable
     Compat.mountGui(g)
 
     self._gui = g
@@ -1236,8 +1237,9 @@ local function playIntro(self)
     local g = create("ScreenGui", {
         Name = "YqantgIntro_" .. HttpService:GenerateGUID(false):sub(1, 6),
         ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 2147483000,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Archivable = false,
     })
+    g.DescendantAdded:Connect(function(d) pcall(function() d.Archivable = false end) end)
     pcall(function() g.ScreenInsets = Enum.ScreenInsets.None end)
     Compat.mountGui(g)
     local TextService = svc("TextService")
@@ -4915,5 +4917,80 @@ function Yqantg:GetSupport() return Compat.report() end
 
 -- always play the boot intro on load (blocks until finished; cannot be disabled by scripts)
 playIntro(Yqantg)
+
+----------------------------------------------------------------------
+-- Anti-leak hardening (runs once, right before the library is handed
+-- back to the loader). None of this can be turned off, skipped or
+-- reconfigured from example.lua or any other outside script.
+--
+-- Honest limits: nothing running as plain Lua inside an executor can
+-- be made un-dumpable — anyone with a working executor already has
+-- full read access to everything they are running. What this DOES do
+-- is close the easy, common theft paths:
+--   • the built UI (ScreenGuis) can't be Clone()'d or caught by
+--     SaveInstance-style dumpers (Archivable = false, set above)
+--   • the public API (CreateWindow, Notify, SaveConfig, ...) can't be
+--     monkey-patched / hooked by another script that got a reference
+--     to this table, which is the usual way a "stealer" intercepts
+--     typed keys, saved configs or callback data
+--   • pairs()/dump-everything scans no longer see those functions at
+--     all (they're moved off the raw table, see below)
+--   • the table is never written to _G / getgenv(), and any script
+--     that already put a reference there gets it scrubbed
+----------------------------------------------------------------------
+do
+    -- 1) never let this module sit in a shared global namespace
+    pcall(function()
+        if _G then _G.Yqantg = nil; _G.YqantgUI = nil end
+        if getgenv then
+            local env = getgenv()
+            if env then env.Yqantg = nil; env.YqantgUI = nil; env.Yqantg_Hub = nil end
+        end
+    end)
+
+    -- 2) freeze pure method / constant tables: nothing ever rewrites
+    --    these fields after load, so a full freeze is always safe
+    local function seal(t)
+        if not t then return end
+        pcall(function()
+            if table.freeze then table.freeze(t) end
+        end)
+        pcall(function() setmetatable(t, { __metatable = "locked" }) end)
+    end
+    seal(Section)
+    seal(Tab)
+    seal(Compat)
+    seal(Yqantg.Themes)
+
+    -- 3) lock the public + internal API surface on Yqantg itself
+    --    without touching its mutable state (Flags, Options, Windows,
+    --    CurrentTheme, settings toggles, ...), which must stay writable
+    local LOCKED_METHODS = {
+        "CreateWindow", "Notify", "Splash", "SetDepth", "SetTheme", "ToggleRGBFlow",
+        "ListConfigs", "SaveConfig", "LoadConfig", "DeleteConfig",
+        "SetAutoLoad", "GetAutoLoad", "LoadAuto", "Unload",
+        "Track", "NewCache", "RegisterCleaner", "GetPending", "Clean", "GetSupport",
+        "_sfx", "_blur", "_syncBlur", "_lock", "_download", "_randomAnime", "_warmPool",
+        "_image", "_startAnimator", "_ensureGui", "_buildTip", "_showTip", "_hideTip",
+        "_moveTip", "_queueAuto",
+    }
+    local vault = {}
+    for _, name in ipairs(LOCKED_METHODS) do
+        local fn = rawget(Yqantg, name)
+        if type(fn) == "function" then
+            vault[name] = fn
+            Yqantg[name] = nil          -- remove the raw key so __newindex sees it as "new" again
+        end
+    end
+    setmetatable(Yqantg, {
+        __index = vault,
+        __newindex = function(t, k, v)
+            if vault[k] ~= nil then return end   -- silently refuse to re-point a locked method
+            rawset(t, k, v)
+        end,
+        __metatable = "locked",
+    })
+end
+
 
 return Yqantg
