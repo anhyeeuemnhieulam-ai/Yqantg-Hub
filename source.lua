@@ -29,6 +29,13 @@
       • Window background image: Background = { Image = id|url|"anime", Transparency = 0..1 }
         Window:SetBackground(img, transparency) / Window:SetBackgroundTransparency(t)
 
+    NEW in 2.2 (visual redesign — no animation / logic changes)
+      • New default theme "Aurora" (deep navy glass + indigo→cyan accent)
+      • Colour-coded status (Success / Error / Warning / Info) for notifications + live stats
+      • Softer, rounder surfaces: 16px window, 12px cards, 10px rows / buttons, pill search + top buttons
+      • Quieter borders + flatter sheen so content stands out; taller top bar with more breathing room
+      • Tinted sidebar highlight with an accent pill, subtler section headers
+
     Usage: see example.lua
 ]]
 
@@ -251,7 +258,7 @@ local Yqantg = {
     Flags        = {},
     Options      = {},
     Windows      = {},
-    CurrentTheme = "Obsidian",
+    CurrentTheme = "Aurora",
     ConfigFolder = "YqantgUI",
     _themed  = {},
     _refresh = {},
@@ -262,6 +269,15 @@ local Yqantg = {
 -- Themes
 ----------------------------------------------------------------------
 Yqantg.Themes = {
+    Aurora = {
+        Accent = Color3.fromRGB(144, 154, 255), Accent2 = Color3.fromRGB(98, 214, 255),
+        Glow1  = Color3.fromRGB(150, 160, 255), Glow2   = Color3.fromRGB(5, 6, 16),
+        Btn1   = Color3.fromRGB(58, 66, 138),   Btn2    = Color3.fromRGB(16, 18, 40),
+        Bg     = Color3.fromRGB(9, 10, 18),     Side    = Color3.fromRGB(12, 14, 25),
+        Panel  = Color3.fromRGB(16, 18, 31),    Element = Color3.fromRGB(23, 26, 44),
+        Stroke = Color3.fromRGB(46, 52, 86),    Text    = Color3.fromRGB(240, 243, 255),
+        SubText= Color3.fromRGB(132, 140, 178),
+    },
     Obsidian = {
         Accent = Color3.fromRGB(255, 255, 255), Accent2 = Color3.fromRGB(125, 125, 130),
         Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(0, 0, 0),
@@ -381,14 +397,14 @@ Yqantg.Themes = {
     },
 }
 -- order shown in Settings > THEME (themes added later by you are appended alphabetically)
-Yqantg.ThemeOrder = { "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
+Yqantg.ThemeOrder = { "Aurora", "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
 
--- status colors are shades of white/gray (icons tell them apart)
+-- status colours (icons still tell them apart for colour-blind users)
 local Status = {
-    Success = { Color3.fromRGB(255, 255, 255), "check", "SUCCESS" },
-    Error   = { Color3.fromRGB(226, 226, 231), "cross", "ERROR" },
-    Warning = { Color3.fromRGB(190, 190, 197), "!", "WARNING" },
-    Info    = { Color3.fromRGB(152, 152, 160), "i", "INFO" },
+    Success = { Color3.fromRGB(86, 224, 140), "check", "SUCCESS" },
+    Error   = { Color3.fromRGB(255, 102, 112), "cross", "ERROR" },
+    Warning = { Color3.fromRGB(255, 193, 64), "!", "WARNING" },
+    Info    = { Color3.fromRGB(128, 164, 255), "i", "INFO" },
 }
 
 ----------------------------------------------------------------------
@@ -1033,11 +1049,11 @@ function Yqantg:Notify(o)
     })
     softShadow(slide, { offset = 7, spread = 36, transparency = 0.35 })
     local card = create("Frame", {
-        Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(14, 14, 16),
+        Size = UDim2.fromScale(1, 1), BackgroundColor3 = resolve("Side"),
         BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 2, Parent = slide,
     })
-    corner(card, 10)
-    sheen(card, 20, 120)
+    corner(card, 14)
+    sheen(card, 20, 190)
     local _, _, spin = glowStroke(card, 1.2, 90, 0.2)
 
     local icon = create("Frame", {
@@ -1058,7 +1074,7 @@ function Yqantg:Notify(o)
         BackgroundColor3 = st[1], BorderSizePixel = 0, Visible = false, ZIndex = 4, Parent = icon,
     })
     corner(badge, 8)
-    create("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(14, 14, 16), Parent = badge })
+    create("UIStroke", { Thickness = 1.5, Color = resolve("Side"), Parent = badge })
     statusGlyph(badge, st[2], 10, BLACK, 5, 0, 0.62)
     self:_image(self.Icons.Notify, function(asset)
         if not pic.Parent then return end
@@ -1071,7 +1087,7 @@ function Yqantg:Notify(o)
 
     local tag = create("TextLabel", {
         BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 7), Size = UDim2.new(1, -110, 0, 12),
-        Text = "●  " .. st[3], TextColor3 = Color3.fromRGB(150, 150, 158), TextSize = 9, Font = Enum.Font.GothamBold,
+        Text = "●  " .. st[3], TextColor3 = st[1], TextSize = 9, Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left, Parent = card,
     })
     local title = create("TextLabel", {
@@ -1712,9 +1728,9 @@ local function newRow(section, height)
     })
     bind(row, "BackgroundColor3", "Element")
     row.ClipsDescendants = true
-    corner(row, 8)
-    local sh = sheen(row, 90, 200)
-    local st = stroke(row, "Stroke", 1, 0.5)
+    corner(row, 10)
+    local sh = sheen(row, 90, 228)
+    local st = stroke(row, "Stroke", 1, 0.66)
     bevelGrad(st)
     local pop = create("UIScale", { Parent = row })
     ROWPOP[row] = pop
@@ -1734,7 +1750,7 @@ local function newRow(section, height)
         sh.Rotation = 90 + (rel - 0.5) * 70 * Yqantg.Depth
     end)
     row.MouseLeave:Connect(function()
-        tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.5 })
+        tween(st, 0.2, { Color = resolve("Stroke"), Transparency = 0.66 })
         tween(pip, 0.2, { Size = UDim2.fromOffset(2, 0) })
         tween(pop, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
         tween(sh, 0.35, { Rotation = 90 })
@@ -1805,18 +1821,18 @@ function Section:AddButton(o)
         Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 34), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
     })
     bind(base, "BackgroundColor3", "Element")
-    corner(base, 8)
+    corner(base, 10)
     local baseGlow = stroke(base, "Stroke", 1, 0.35)
     local btn = create("TextButton", {
         Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0,
         AutoButtonColor = false, Text = "", ClipsDescendants = true, ZIndex = 2, Parent = wrap,
     })
-    corner(btn, 8)
+    corner(btn, 10)
     gradient(btn, "BtnGrad").Rotation = 90
     local bst, _, bh = glowStroke(btn, 1.2, 70, 0.6, { idle = true, gate = gateOf(self) })
     local bs = create("UIScale", { Parent = btn })
     local shade = create("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, BorderSizePixel = 0, Parent = btn })
-    corner(shade, 8)
+    corner(shade, 10)
     -- top specular edge (light hits the upper lip of the key)
     local lip = create("Frame", { Position = UDim2.fromOffset(8, 1), Size = UDim2.new(1, -16, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.8, BorderSizePixel = 0, ZIndex = 3, Parent = btn })
     local shine = create("Frame", {
@@ -2045,8 +2061,8 @@ function Section:AddInput(o)
         Font = Enum.Font.Gotham, ClearTextOnFocus = false, TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
     })
     bind(box, "BackgroundColor3", "Panel"); bind(box, "TextColor3", "Text"); bind(box, "PlaceholderColor3", "SubText")
-    corner(box, 6)
-    create("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = box })
+    corner(box, 8)
+    create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = box })
     local bs = stroke(box, "Stroke", 1, 0.5)
     addTip(box, o.Tooltip)
     box.ClipsDescendants = true
@@ -2092,7 +2108,7 @@ function Section:AddKeybind(o)
         BorderSizePixel = 0, AutoButtonColor = false, TextSize = 11, Font = Enum.Font.GothamBold, Parent = row,
     })
     bind(btn, "BackgroundColor3", "Panel"); bind(btn, "TextColor3", "Accent")
-    corner(btn, 6)
+    corner(btn, 8)
 
     local function render()
         btn.Text = obj.Listening and "..." or (obj.Value == Enum.KeyCode.Unknown and "None" or obj.Value.Name)
@@ -2818,7 +2834,7 @@ function Section:AddOwner(o)
         BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "",
         TextColor3 = WHITE, TextSize = 11, Font = Enum.Font.GothamBold, ClipsDescendants = true, Parent = row,
     })
-    corner(btn, 8)
+    corner(btn, 10)
     gradient(btn, "BtnGrad").Rotation = 90
     local _, _, oh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
     local btnL = create("TextLabel", {
@@ -2961,7 +2977,7 @@ function Section:AddSocial(o)
         AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -10, .5, 0), Size = UDim2.fromOffset(80, 26),
         BackgroundColor3 = WHITE, BorderSizePixel = 0, AutoButtonColor = false, Text = "", ClipsDescendants = true, Parent = row,
     })
-    corner(btn, 8)
+    corner(btn, 10)
     gradient(btn, "BtnGrad").Rotation = 90
     local _, _, bh = glowStroke(btn, 1.2, 70, 0.35, { idle = true, gate = gateOf(self) })
     local btnL = create("TextLabel", {
@@ -3276,15 +3292,15 @@ function Tab:AddSection(o)
         table.insert(self.Window._panels, { frame = frame, clear = o.NoHeader == true })
         if self.Window._glass and not o.NoHeader then self.Window:_glass() end
     end
-    corner(frame, 10)
-    local fst = stroke(frame, "Stroke", 1, 0.5)
+    corner(frame, 12)
+    local fst = stroke(frame, "Stroke", 1, 0.55)
     bevelGrad(fst)
-    sheen(frame, 90, 185)
+    sheen(frame, 90, 218)
     local fscale = create("UIScale", { Parent = frame })
     self._secs = self._secs or {}
     self._secs[#self._secs + 1] = fscale
     sec.Frame = frame
-    local pad = create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6), PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), Parent = frame })
+    local pad = create("UIPadding", { PaddingTop = UDim.new(0, 7), PaddingBottom = UDim.new(0, 7), PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7), Parent = frame })
     create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
     if o.NoHeader then
         frame.BackgroundTransparency = 1
@@ -3298,13 +3314,13 @@ function Tab:AddSection(o)
             Size = UDim2.new(1, 0, 0, 28), BackgroundColor3 = WHITE, BorderSizePixel = 0,
             AutoButtonColor = false, Text = "", LayoutOrder = 1, Parent = frame,
         })
-        corner(head, 8)
-        local hg = gradient(head, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.82), NumberSequenceKeypoint.new(1, 0.97) }))
+        corner(head, 9)
+        local hg = gradient(head, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.86), NumberSequenceKeypoint.new(1, 1) }))
         local pip = create("Frame", { Position = UDim2.fromOffset(8, 7), Size = UDim2.fromOffset(3, 14), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = head })
         corner(pip, 2)
         tl = create("TextLabel", {
             BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 0), Size = UDim2.new(1, -40, 1, 0),
-            Text = o.Name or "Section", TextColor3 = WHITE, TextSize = 13, Font = Enum.Font.GothamBold,
+            Text = o.Name or "Section", TextColor3 = WHITE, TextSize = 12, Font = Enum.Font.GothamBold,
             TextXAlignment = Enum.TextXAlignment.Left, Parent = head,
         })
         arrow = drawIcon(head, "down", { size = 12, color = WHITE, pos = UDim2.new(1, -16, .5, 0), thick = 2 })
@@ -3386,7 +3402,7 @@ function Yqantg:CreateWindow(cfg)
     local function vgate() return Window.Visible end
 
     local fs = cfg.Size or UDim2.fromOffset(600, 380)
-    local TOP, SIDE = 42, 150
+    local TOP, SIDE = 46, 152
 
     -- Root holds the whole 3D stack: shadows -> slabs -> face (Main)
     local Root = create("Frame", {
@@ -3397,19 +3413,19 @@ function Yqantg:CreateWindow(cfg)
     local shNear = softShadow(Root, { offset = 5, spread = 28, transparency = 0.35, z = 0 })
     local slab2 = create("Frame", { Position = UDim2.fromOffset(8, 13), Size = UDim2.new(1, -16, 1, 0), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
     bind(slab2, "BackgroundColor3", "Panel")
-    corner(slab2, 12)
+    corner(slab2, 16)
     local slab = create("Frame", { Position = UDim2.fromOffset(0, 7), Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 1, Parent = Root })
     bind(slab, "BackgroundColor3", "Side")
-    corner(slab, 12)
+    corner(slab, 16)
     local Main = create("CanvasGroup", { Name = "Face", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, ZIndex = 2, Parent = Root })
     bind(Main, "BackgroundColor3", "Bg")
-    corner(Main, 12)
+    corner(Main, 16)
     local bgImg = create("ImageLabel", {
         Name = "Background", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 0,
         ScaleType = Enum.ScaleType.Crop, ImageTransparency = 1, Visible = false, Parent = Main,
     })
-    corner(bgImg, 12)
-    local mainSheen = sheen(Main, 65, 150)
+    corner(bgImg, 16)
+    local mainSheen = sheen(Main, 65, 190)
 
     -- depth machinery: introV (0..1 = how "deployed" the stack is), liftV (drag lift)
     local introV = create("NumberValue", { Value = 1, Parent = Root })
@@ -3503,21 +3519,21 @@ function Yqantg:CreateWindow(cfg)
     ------------------------------------------------ topbar
     local top = create("Frame", { Size = UDim2.new(1, 0, 0, TOP), BorderSizePixel = 0, Parent = Main })
     bind(top, "BackgroundColor3", "Side")
-    sheen(top, 0, 165)
+    sheen(top, 0, 205)
 
     local avatar = create("ImageLabel", {
-        Position = UDim2.fromOffset(10, 7), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = 0,
+        Position = UDim2.fromOffset(12, 8), Size = UDim2.fromOffset(30, 30), BackgroundTransparency = 0,
         Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150", Parent = top,
     })
     bind(avatar, "BackgroundColor3", "Element")
-    corner(avatar, 14)
+    corner(avatar, 15)
     glowStroke(avatar, 1.6, 120, 0.1, { gate = vgate, pulse = true })
     local title = text(top, cfg.Title or "Yqantg", 14, "Text", Enum.Font.GothamBold)
-    title.Position = UDim2.fromOffset(46, 5); title.Size = UDim2.fromOffset(SIDE - 46, 16)
+    title.Position = UDim2.fromOffset(52, 7); title.Size = UDim2.fromOffset(SIDE - 52, 16)
     local ttg = gradient(title, "TextGrad")
     animate(title, function(t) ttg.Offset = Vector2.new(math.sin(t * 1.2) * 0.55, 0) end, vgate)
     local subtitle = text(top, "●  " .. (cfg.Subtitle or LocalPlayer.Name), 10, "SubText", Enum.Font.Gotham)
-    subtitle.Position = UDim2.fromOffset(46, 21); subtitle.Size = UDim2.fromOffset(SIDE - 46, 14)
+    subtitle.Position = UDim2.fromOffset(52, 24); subtitle.Size = UDim2.fromOffset(SIDE - 52, 14)
 
     local function topButton(xFromRight)
         local b = create("TextButton", {
@@ -3525,7 +3541,7 @@ function Yqantg:CreateWindow(cfg)
             Size = UDim2.fromOffset(26, 26), BorderSizePixel = 0, AutoButtonColor = false, Text = "", Parent = top,
         })
         bind(b, "BackgroundColor3", "Element")
-        corner(b, 7)
+        corner(b, 13)
         b.MouseEnter:Connect(function() tween(b, 0.15, { BackgroundColor3 = resolve("Stroke") }) end)
         b.MouseLeave:Connect(function() tween(b, 0.15, { BackgroundColor3 = resolve("Element") }) end)
         return b
@@ -3662,7 +3678,7 @@ function Yqantg:CreateWindow(cfg)
 
     local side = create("Frame", { Size = UDim2.new(0, SIDE, 1, 0), BorderSizePixel = 0, Parent = Body })
     bind(side, "BackgroundColor3", "Side")
-    sheen(side, 90, 170)
+    sheen(side, 90, 205)
 
     local search = create("TextBox", {
         Position = UDim2.fromOffset(8, 8), Size = UDim2.new(1, -16, 0, 26), BorderSizePixel = 0, Text = "",
@@ -3670,19 +3686,21 @@ function Yqantg:CreateWindow(cfg)
         TextXAlignment = Enum.TextXAlignment.Left, Parent = side,
     })
     bind(search, "BackgroundColor3", "Element"); bind(search, "TextColor3", "Text"); bind(search, "PlaceholderColor3", "SubText")
-    corner(search, 8)
-    stroke(search, "Stroke", 1, 0.5)
-    create("UIPadding", { PaddingLeft = UDim.new(0, 10), Parent = search })
+    corner(search, 13)
+    stroke(search, "Stroke", 1, 0.6)
+    create("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = search })
 
     -- sliding highlight behind the active tab
     local indicator = create("Frame", {
         Position = UDim2.fromOffset(6, 42), Size = UDim2.new(1, -12, 0, 32), BackgroundColor3 = WHITE,
         BorderSizePixel = 0, Visible = false, Parent = side,
     })
-    corner(indicator, 8)
-    gradient(indicator, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.8), NumberSequenceKeypoint.new(1, 0.96) }))
+    corner(indicator, 10)
+    gradient(indicator, "AccentGrad", NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.93) }))
+    create("UIStroke", { Thickness = 1, Transparency = 0.82, Color = WHITE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = indicator })
     local ipip = create("Frame", { AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 0, .5, 0), Size = UDim2.fromOffset(3, 16), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = indicator })
     corner(ipip, 2)
+    gradient(ipip, "AccentGrad").Rotation = 90
 
     local tabList = create("ScrollingFrame", {
         Position = UDim2.fromOffset(6, 42), Size = UDim2.new(1, -12, 1, -48), BackgroundTransparency = 1,
@@ -4519,9 +4537,9 @@ function Yqantg:CreateWindow(cfg)
             Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = WHITE, BackgroundTransparency = 1,
             BorderSizePixel = 0, AutoButtonColor = false, Text = "", LayoutOrder = #Window.Tabs + 1, Parent = tabList,
         })
-        corner(b, 8)
+        corner(b, 10)
         b.ClipsDescendants = true
-        local lab = text(b, tab.Name, 13, "SubText", Enum.Font.GothamMedium)
+        local lab = text(b, tab.Name, 13, "SubText", Enum.Font.GothamBold)
         lab.Position = UDim2.fromOffset(14, 0); lab.Size = UDim2.new(1, -44, 1, 0)
         local arrow = drawIcon(b, "right", { size = 11, color = WHITE, pos = UDim2.new(1, -14, .5, 0), thick = 2 })
         arrow.Visible = false
