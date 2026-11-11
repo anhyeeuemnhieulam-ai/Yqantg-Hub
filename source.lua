@@ -55,6 +55,13 @@
       • "Steel": cooler gunmetal variant.  Colour themes are still in Settings > THEME.
       • Status, console, chips, lock and brand cards are all black / grey / white now
 
+    NEW in 2.7 (tile layout)
+      • Consecutive Toggles (or consecutive Buttons) now sit 2-up on one row as tiles.
+        A lone toggle / button stays full width; any other element in between starts a new row.
+      • Toggle tile: name on the left, switch on the right.
+      • Off for everything:  Yqantg.Tiles = false     Off for one section:  AddSection({ Tiles = false })
+      • Tabs go 2-column only when really wide (so tiles keep enough room)
+
     FIX in 2.5
       • Auto-load now actually runs: the config chosen with "Set as auto-load" is applied
         automatically ~1s after your script finishes creating its elements (once per session).
@@ -277,6 +284,7 @@ local Yqantg = {
     SoundEnabled = true,
     SoundVolume  = 1,        -- 0..1.5 multiplier for all sound cues
     Tooltips     = true,
+    Tiles        = true,     -- consecutive toggles / buttons share a row (2-up tiles)
     AutoLoad     = true,     -- apply the saved auto-load config once the script has built its UI
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
     AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
@@ -1833,6 +1841,32 @@ local function changed(obj, o, silent)
     if not silent and o.Callback then task.spawn(o.Callback, obj.Value) end
 end
 
+-- 2-up tiles: `node` was just parented to section.Body. If the element right before it is an open
+-- half-filled pair of the same kind, move it in beside that one; otherwise start a new pair.
+local function tileUp(section, node, kind, h)
+    if not section.Tiles then return end
+    local body = section.Body
+    local prev
+    local kids = body:GetChildren()
+    for i = #kids - 1, 1, -1 do
+        if kids[i]:IsA("GuiObject") then prev = kids[i]; break end
+    end
+    local open = section._pair
+    section._pair = nil
+    if open and prev == open.frame and open.kind == kind then
+        node.Parent = open.frame
+        node.Size = UDim2.new(0.5, -2, 1, 0)
+        open.first.Size = UDim2.new(0.5, -2, 1, 0)
+    else
+        local frame = create("Frame", { Name = "Pair", Size = UDim2.new(1, 0, 0, h), BackgroundTransparency = 1, Parent = body })
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = frame })
+        node.Parent = frame
+        node.Size = UDim2.new(1, 0, 1, 0)
+        section._pair = { frame = frame, kind = kind, first = node }
+    end
+    if section._recount then task.defer(section._recount) end
+end
+
 local function hoverable(btn, target, base, over)
     btn.MouseEnter:Connect(function() tween(target, 0.15, { BackgroundTransparency = over }) end)
     btn.MouseLeave:Connect(function() tween(target, 0.15, { BackgroundTransparency = base }) end)
@@ -1877,6 +1911,7 @@ end
 function Section:AddButton(o)
     local obj = { Type = "Button" }
     local wrap = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = self.Body })
+    tileUp(self, wrap, "button", 34)
     -- extruded base (the "side" of the key)
     local base = create("Frame", {
         Position = UDim2.fromOffset(0, 3), Size = UDim2.new(1, 0, 0, 31), BorderSizePixel = 0, ZIndex = 1, Parent = wrap,
@@ -1972,11 +2007,18 @@ end
 function Section:AddToggle(o)
     local obj = { Type = "Toggle", Value = o.Default == true }
     local row = newRow(self, 34)
+    tileUp(self, row, "toggle", 34)
+    local tiles = self.Tiles == true
     local l = text(row, o.Name or "Toggle", 13)
-    l.Position = UDim2.fromOffset(54, 0); l.Size = UDim2.new(1, -100, 1, 0)
+    if tiles then
+        l.Position = UDim2.fromOffset(12, 0); l.Size = UDim2.new(1, -64, 1, 0)
+    else
+        l.Position = UDim2.fromOffset(54, 0); l.Size = UDim2.new(1, -100, 1, 0)
+    end
 
     local track = create("Frame", {
-        AnchorPoint = Vector2.new(0, .5), Position = UDim2.new(0, 10, .5, 0),
+        AnchorPoint = tiles and Vector2.new(1, .5) or Vector2.new(0, .5),
+        Position = tiles and UDim2.new(1, -10, .5, 0) or UDim2.new(0, 10, .5, 0),
         Size = UDim2.fromOffset(34, 18), BorderSizePixel = 0, Parent = row,
     })
     corner(track, 9)
@@ -1995,6 +2037,7 @@ function Section:AddToggle(o)
     local tag = text(row, "", 10, "SubText", Enum.Font.GothamBold)
     tag.AnchorPoint = Vector2.new(1, .5); tag.Position = UDim2.new(1, -10, .5, 0)
     tag.Size = UDim2.fromOffset(34, 14); tag.TextXAlignment = Enum.TextXAlignment.Right
+    tag.Visible = not tiles
     local click = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = "", Parent = row })
 
     local function render(animate)
@@ -3353,7 +3396,7 @@ function Tab:AddSection(o)
         col = (o.Side == "Right" or (o.Side == nil and self._colCount % 2 == 0)) and self.Right or self.Left
     end
 
-    local sec = setmetatable({ Tab = self }, Section)
+    local sec = setmetatable({ Tab = self, Tiles = (o.Tiles == nil) and (Yqantg.Tiles ~= false) or (o.Tiles == true) }, Section)
     local frame = create("Frame", {
         Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BorderSizePixel = 0,
         LayoutOrder = self._sectionCount, Parent = col,
@@ -3412,7 +3455,6 @@ function Tab:AddSection(o)
     local layout = create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = body })
     sec.Body = body
     if head then
-        local n = 0
         local badge = create("Frame", {
             AnchorPoint = Vector2.new(1, .5), Position = UDim2.new(1, -36, .5, 0), Size = UDim2.fromOffset(22, 16),
             BackgroundTransparency = 0.82, BorderSizePixel = 0, Visible = false, ZIndex = 3, Parent = head,
@@ -3421,11 +3463,22 @@ function Tab:AddSection(o)
         corner(badge, 8)
         local cnt = text(badge, "0", 10, "Accent", Enum.Font.GothamBold)
         cnt.Size = UDim2.fromScale(1, 1); cnt.TextXAlignment = Enum.TextXAlignment.Center; cnt.ZIndex = 4
-        body.ChildAdded:Connect(function(c)
-            if c:IsA("GuiObject") and c.Size.Y.Offset ~= 1 then
-                n = n + 1; cnt.Text = tostring(n); badge.Visible = true
+        local function recount()
+            local n = 0
+            for _, c in ipairs(body:GetChildren()) do
+                if c:IsA("GuiObject") then
+                    if c.Name == "Pair" then
+                        for _, k in ipairs(c:GetChildren()) do if k:IsA("GuiObject") then n = n + 1 end end
+                    elseif c.Size.Y.Offset ~= 1 then
+                        n = n + 1
+                    end
+                end
             end
-        end)
+            cnt.Text = tostring(n); badge.Visible = n > 0
+        end
+        sec._recount = recount
+        body.ChildAdded:Connect(function() task.defer(recount) end)
+        body.ChildRemoved:Connect(function() task.defer(recount) end)
     end
 
     -- smooth collapse / expand
@@ -4691,9 +4744,9 @@ function Yqantg:CreateWindow(cfg)
             if tab.Columns == 1 then want = true
             elseif tab.Columns == 2 then want = false
             elseif w > 1 then
-                if stacked == nil then want = w < 515
-                elseif stacked then want = w < 530
-                else want = w < 500 end
+                if stacked == nil then want = w < 660
+                elseif stacked then want = w < 680
+                else want = w < 640 end
             end
             if want == nil then return end
             if want == stacked and not force then return end
