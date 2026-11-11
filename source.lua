@@ -30,8 +30,8 @@
         Window:SetBackground(img, transparency) / Window:SetBackgroundTransparency(t)
 
     NEW in 2.2 (visual redesign — no animation / logic changes)
-      • New default theme "Aurora" (deep navy glass + indigo→cyan accent)
-      • Colour-coded status (Success / Error / Warning / Info) for notifications + live stats
+      • (2.2 default theme was "Aurora"; replaced by "Onyx" in 2.6)
+      • (2.2 colour-coded status was replaced by black / grey / white shades in 2.6)
       • Softer, rounder surfaces: 16px window, 12px cards, 10px rows / buttons, pill search + top buttons
       • Quieter borders + flatter sheen so content stands out; taller top bar with more breathing room
       • Tinted sidebar highlight with an accent pill, subtler section headers
@@ -48,6 +48,20 @@
         so labels and values are never cut off. Resize the window and it re-flows live.
       • Force it per tab:  Window:AddTab({ Name = "Main", Columns = 1 | 2 })
       • Section headers show an item-count badge
+
+    NEW in 2.6 (monochrome palette)
+      • Default theme "Onyx": ink black -> graphite -> silver -> soft white, with a white -> silver
+        metallic gradient on every accent (toggles, sliders, tabs, title, glow)
+      • "Steel": cooler gunmetal variant.  Colour themes are still in Settings > THEME.
+      • Status, console, chips, lock and brand cards are all black / grey / white now
+
+    FIX in 2.5
+      • Auto-load now actually runs: the config chosen with "Set as auto-load" is applied
+        automatically ~1s after your script finishes creating its elements (once per session).
+        Disable with  Yqantg.AutoLoad = false  and call Yqantg:LoadAuto() yourself if you prefer.
+      • Color pickers save / restore their alpha too
+      • Saving a config selects it in the list, so "Set as auto-load" works right away
+      • A broken value in a config file can no longer stop the rest from loading
 
     Usage: see example.lua
 ]]
@@ -263,6 +277,7 @@ local Yqantg = {
     SoundEnabled = true,
     SoundVolume  = 1,        -- 0..1.5 multiplier for all sound cues
     Tooltips     = true,
+    AutoLoad     = true,     -- apply the saved auto-load config once the script has built its UI
     BlockInput   = true,     -- sink camera / game input while the pointer is over the UI
     AnimeIcons   = true,     -- random anime-girl images for notify icons / orb (needs writefile + getcustomasset)
     Icons        = {},       -- Icons.Notify / Icons.Orb = id | url | {list} | false (off) ; nil = random anime
@@ -271,7 +286,7 @@ local Yqantg = {
     Flags        = {},
     Options      = {},
     Windows      = {},
-    CurrentTheme = "Aurora",
+    CurrentTheme = "Onyx",
     ConfigFolder = "YqantgUI",
     _themed  = {},
     _refresh = {},
@@ -282,14 +297,23 @@ local Yqantg = {
 -- Themes
 ----------------------------------------------------------------------
 Yqantg.Themes = {
-    Aurora = {
-        Accent = Color3.fromRGB(144, 154, 255), Accent2 = Color3.fromRGB(98, 214, 255),
-        Glow1  = Color3.fromRGB(150, 160, 255), Glow2   = Color3.fromRGB(5, 6, 16),
-        Btn1   = Color3.fromRGB(58, 66, 138),   Btn2    = Color3.fromRGB(16, 18, 40),
-        Bg     = Color3.fromRGB(9, 10, 18),     Side    = Color3.fromRGB(12, 14, 25),
-        Panel  = Color3.fromRGB(16, 18, 31),    Element = Color3.fromRGB(23, 26, 44),
-        Stroke = Color3.fromRGB(46, 52, 86),    Text    = Color3.fromRGB(240, 243, 255),
-        SubText= Color3.fromRGB(132, 140, 178),
+    Onyx = {
+        Accent = Color3.fromRGB(252, 252, 254), Accent2 = Color3.fromRGB(158, 160, 170),
+        Glow1  = Color3.fromRGB(255, 255, 255), Glow2   = Color3.fromRGB(0, 0, 0),
+        Btn1   = Color3.fromRGB(84, 84, 92),    Btn2    = Color3.fromRGB(15, 15, 18),
+        Bg     = Color3.fromRGB(6, 6, 7),       Side    = Color3.fromRGB(11, 11, 13),
+        Panel  = Color3.fromRGB(16, 16, 18),    Element = Color3.fromRGB(25, 25, 28),
+        Stroke = Color3.fromRGB(62, 62, 68),    Text    = Color3.fromRGB(246, 246, 248),
+        SubText= Color3.fromRGB(140, 140, 148),
+    },
+    Steel = {
+        Accent = Color3.fromRGB(232, 235, 241), Accent2 = Color3.fromRGB(118, 124, 138),
+        Glow1  = Color3.fromRGB(240, 244, 252), Glow2   = Color3.fromRGB(2, 3, 6),
+        Btn1   = Color3.fromRGB(74, 78, 90),    Btn2    = Color3.fromRGB(17, 18, 22),
+        Bg     = Color3.fromRGB(9, 10, 12),     Side    = Color3.fromRGB(14, 15, 18),
+        Panel  = Color3.fromRGB(20, 21, 25),    Element = Color3.fromRGB(29, 30, 35),
+        Stroke = Color3.fromRGB(68, 72, 82),    Text    = Color3.fromRGB(240, 242, 246),
+        SubText= Color3.fromRGB(144, 149, 162),
     },
     Obsidian = {
         Accent = Color3.fromRGB(255, 255, 255), Accent2 = Color3.fromRGB(125, 125, 130),
@@ -410,14 +434,14 @@ Yqantg.Themes = {
     },
 }
 -- order shown in Settings > THEME (themes added later by you are appended alphabetically)
-Yqantg.ThemeOrder = { "Aurora", "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
+Yqantg.ThemeOrder = { "Onyx", "Steel", "Obsidian", "Eclipse", "Graphite", "Crimson", "Ocean", "Emerald", "Violet", "Sunset", "Sakura", "Gold", "Cyber", "Midnight", "Mint" }
 
--- status colours (icons still tell them apart for colour-blind users)
+-- status = shades of white / grey (the icons tell them apart)
 local Status = {
-    Success = { Color3.fromRGB(86, 224, 140), "check", "SUCCESS" },
-    Error   = { Color3.fromRGB(255, 102, 112), "cross", "ERROR" },
-    Warning = { Color3.fromRGB(255, 193, 64), "!", "WARNING" },
-    Info    = { Color3.fromRGB(128, 164, 255), "i", "INFO" },
+    Success = { Color3.fromRGB(255, 255, 255), "check", "SUCCESS" },
+    Error   = { Color3.fromRGB(224, 224, 230), "cross", "ERROR" },
+    Warning = { Color3.fromRGB(184, 184, 192), "!", "WARNING" },
+    Info    = { Color3.fromRGB(146, 146, 156), "i", "INFO" },
 }
 
 ----------------------------------------------------------------------
@@ -1326,8 +1350,8 @@ function Yqantg:Splash(o)
             Text = "", TextSize = 34, Font = Enum.Font.GothamBlack, TextColor3 = color, ZIndex = z, Parent = stage,
         })
     end
-    local gR = titleLabel(Color3.fromRGB(255, 40, 90), 4); gR.TextTransparency = 1
-    local gC = titleLabel(Color3.fromRGB(40, 230, 255), 4); gC.TextTransparency = 1
+    local gR = titleLabel(Color3.fromRGB(205, 205, 214), 4); gR.TextTransparency = 1
+    local gC = titleLabel(Color3.fromRGB(105, 105, 116), 4); gC.TextTransparency = 1
     local title = titleLabel(WHITE, 5)
     local tg = create("UIGradient", { Parent = title })
     bind(tg, "Color", "TextGrad")
@@ -1541,7 +1565,7 @@ function Yqantg:SaveConfig(name)
     for flag, v in pairs(self.Flags) do
         local opt = self.Options[flag]
         if typeof(v) == "EnumItem" then data[flag] = { __enum = v.Name }
-        elseif typeof(v) == "Color3" then data[flag] = { __c3 = { v.R, v.G, v.B } }
+        elseif typeof(v) == "Color3" then data[flag] = { __c3 = { v.R, v.G, v.B }, a = opt and opt.Alpha }
         elseif type(v) ~= "userdata" and not (opt and opt.NoSave) then data[flag] = v end
     end
     Compat.makefolder(self.ConfigFolder)
@@ -1558,8 +1582,12 @@ function Yqantg:LoadConfig(name)
     for flag, v in pairs(data) do
         local opt = self.Options[flag]
         if opt then
-            if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum] elseif type(v) == "table" and v.__c3 then v = Color3.new(v.__c3[1], v.__c3[2], v.__c3[3]) end
-            pcall(function() opt:Set(v) end)
+            pcall(function()
+                local alpha
+                if type(v) == "table" and v.__enum then v = Enum.KeyCode[v.__enum]
+                elseif type(v) == "table" and v.__c3 then alpha = tonumber(v.a); v = Color3.new(v.__c3[1], v.__c3[2], v.__c3[3]) end
+                if alpha then opt:Set(v, false, alpha) else opt:Set(v) end
+            end)
         end
     end
     return true
@@ -1591,8 +1619,27 @@ function Yqantg:GetAutoLoad()
 end
 
 function Yqantg:LoadAuto()
+    self._autoDone = true
     local n = self:GetAutoLoad()
     return n and self:LoadConfig(n) or false
+end
+
+-- runs LoadAuto once, a moment after the last element was created
+-- (every element registers here, so it works whatever order your script builds the UI in)
+function Yqantg:_queueAuto()
+    if self._autoDone or self._unloaded or self.AutoLoad == false then return end
+    self._autoTok = (self._autoTok or 0) + 1
+    local my = self._autoTok
+    task.delay(0.9, function()
+        if my ~= self._autoTok or self._autoDone or self._unloaded or self.AutoLoad == false then return end
+        local n = self:GetAutoLoad()
+        if not n then return end
+        if self:LoadAuto() then
+            self:Notify({ Title = "Auto-load", Content = "Loaded config: " .. tostring(n), Type = "Success" })
+        else
+            self:Notify({ Title = "Auto-load failed", Content = "Config not found: " .. tostring(n), Type = "Warning" })
+        end
+    end)
 end
 
 function Yqantg:Unload()
@@ -1777,6 +1824,7 @@ local function register(obj, o)
     if o.Flag then
         Yqantg.Flags[o.Flag] = obj.Value
         Yqantg.Options[o.Flag] = obj
+        Yqantg:_queueAuto()
     end
 end
 
@@ -2717,8 +2765,8 @@ function Section:AddConsole(o)
     create("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4), Parent = scroll })
     create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
     local COLORS = {
-        Error = Color3.fromRGB(255, 90, 90), Success = Color3.fromRGB(90, 255, 130),
-        Warning = Color3.fromRGB(255, 200, 80), Info = Color3.fromRGB(220, 220, 228),
+        Error = Color3.fromRGB(226, 226, 232), Success = Color3.fromRGB(255, 255, 255),
+        Warning = Color3.fromRGB(180, 180, 190), Info = Color3.fromRGB(140, 140, 150),
     }
     function obj:Log(msg, kind)
         obj._n = obj._n + 1
@@ -2931,7 +2979,7 @@ function Section:AddSocial(o)
     o = o or {}
     markInfo(self)
     local isYT = tostring(o.Kind or "YouTube"):lower():find("you", 1, true) ~= nil
-    local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
+    local brand = isYT and Color3.fromRGB(196, 196, 204) or Color3.fromRGB(122, 124, 136)
     local link = o.Link or (isYT and "https://youtube.com/@yqantg" or "https://discord.gg/yurKERvexU")
     local row = newRow(self, 46)
 
@@ -2956,9 +3004,10 @@ function Section:AddSocial(o)
     if isYT then
         local plate = create("Frame", {
             AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(36, 24),
-            BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, ZIndex = 2, Parent = logo,
+            BackgroundColor3 = Color3.fromRGB(44, 44, 50), BorderSizePixel = 0, ZIndex = 2, Parent = logo,
         })
         corner(plate, 8)
+        create("UIStroke", { Thickness = 1.5, Color = WHITE, Transparency = 0.35, Parent = plate })
         playShape(plate, 10, 11, WHITE, 3)
     else
         local head = create("Frame", {
@@ -3176,14 +3225,14 @@ function Section:AddOverview(o)
         local r3 = row(46)
         local function half(idx, kind, link, title)
             local isYT = kind == "YouTube"
-            local brand = isYT and Color3.fromRGB(255, 40, 40) or Color3.fromRGB(88, 101, 242)
+            local brand = isYT and Color3.fromRGB(196, 196, 204) or Color3.fromRGB(122, 124, 136)
             local h = create("Frame", { BackgroundTransparency = 1, Position = UDim2.fromScale(idx * 0.5, 0), Size = UDim2.fromScale(0.5, 1), Parent = r3 })
             local badgeF = create("Frame", { Position = UDim2.fromOffset(10, 6), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = WHITE, BorderSizePixel = 0, Parent = h })
             corner(badgeF, 10)
             create("UIGradient", { Color = ColorSequence.new(brand:Lerp(BLACK, 0.45), Color3.fromRGB(12, 12, 14)), Rotation = 35, Parent = badgeF })
             local logo = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), BackgroundTransparency = 1, Size = UDim2.fromOffset(26, 20), ZIndex = 2, Parent = badgeF })
             if isYT then
-                local plate = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(24, 17), BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, ZIndex = 2, Parent = logo })
+                local plate = create("Frame", { AnchorPoint = Vector2.new(.5, .5), Position = UDim2.fromScale(.5, .5), Size = UDim2.fromOffset(24, 17), BackgroundColor3 = Color3.fromRGB(44, 44, 50), BorderSizePixel = 0, ZIndex = 2, Parent = logo })
                 corner(plate, 6)
                 playShape(plate, 8, 9, WHITE, 3)
             else
@@ -3258,7 +3307,7 @@ function Section:AddOverview(o)
         stroke(c, "Stroke", 1, 0.3)
         local d = create("Frame", {
             Position = UDim2.fromOffset(8, 5), Size = UDim2.fromOffset(8, 8), BorderSizePixel = 0, Parent = c,
-            BackgroundColor3 = it[2] and Color3.fromRGB(80, 220, 120) or Color3.fromRGB(230, 80, 80),
+            BackgroundColor3 = it[2] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(88, 88, 96),
         })
         corner(d, 4)
         local t = text(c, it[1], 9, "SubText", Enum.Font.GothamBold)
@@ -4053,7 +4102,7 @@ function Yqantg:CreateWindow(cfg)
 
     -- MEMORY CLEANER
     local memCard = card("MEMORY CLEANER")
-    local GREEN = Color3.fromRGB(80, 255, 130)
+    local GREEN = Color3.fromRGB(255, 255, 255)
     local acT = 0
     local function fmtMB(x) return (x >= 10) and ("%.1f MB"):format(x) or ("%.2f MB"):format(x) end
 
@@ -4585,7 +4634,7 @@ function Yqantg:CreateWindow(cfg)
         local arrow = drawIcon(b, "right", { size = 11, color = WHITE, pos = UDim2.new(1, -14, .5, 0), thick = 2 })
         arrow.Visible = false
         if tab.Locked then
-            drawIcon(b, "lock", { size = 13, color = Color3.fromRGB(240, 175, 60), pos = UDim2.new(1, -15, .5, 0), thick = 1.6 })
+            drawIcon(b, "lock", { size = 13, color = Color3.fromRGB(206, 206, 214), pos = UDim2.new(1, -15, .5, 0), thick = 1.6 })
         end
 
         local group = create("CanvasGroup", {
@@ -4696,6 +4745,7 @@ function Yqantg:CreateWindow(cfg)
             local n = nameBox.Value ~= "" and nameBox.Value or list.Value
             if n and Yqantg:SaveConfig(n) then
                 list:SetOptions(Yqantg:ListConfigs())
+                list:Set(n, true)
                 Yqantg:Notify({ Title = "Config saved", Content = tostring(n) .. (Compat.canFiles and "" or "  (this session only)"), Type = "Success" })
             else
                 Yqantg:Notify({ Title = "Save failed", Content = "Enter a name (executor must support writefile).", Type = "Error" })
