@@ -2983,6 +2983,121 @@ function Section:AddProfile()
     return { Type = "Profile", SetVisible = function(_, b) row.Visible = b end }
 end
 
+---------------------------------------------------------------- 3D avatar (spinning)
+-- Section:AddAvatar3D({ Height = 150, Speed = 40, Name = true, UserId = LocalPlayer.UserId })
+-- Clones your character (or builds one from the UserId) into a ViewportFrame and spins it.
+-- Drag with the mouse / finger to rotate it by hand.
+function Section:AddAvatar3D(o)
+    o = o or {}
+    markInfo(self)
+    local height = o.Height or 150
+    local uid    = o.UserId or LocalPlayer.UserId
+    local obj    = { Type = "Avatar3D", Speed = o.Speed or 40 }
+    local row    = newRow(self, height)
+
+    local frame = create("Frame", {
+        Position = UDim2.fromOffset(8, 6), Size = UDim2.fromOffset(height - 12, height - 12), BorderSizePixel = 0, Parent = row,
+    })
+    bind(frame, "BackgroundColor3", "Panel")
+    corner(frame, 14)
+    stroke(frame, "Accent", 1, 0.55)
+
+    local vp = create("ViewportFrame", {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Ambient = Color3.fromRGB(170, 170, 185),
+        LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-0.4, -0.6, -0.7), Active = true, Parent = frame,
+    })
+    local cam = create("Camera", { FieldOfView = 30, Parent = vp })
+    vp.CurrentCamera = cam
+
+    local loading = text(frame, "loading...", 11, "SubText")
+    loading.Size = UDim2.fromScale(1, 1); loading.TextXAlignment = Enum.TextXAlignment.Center
+
+    if o.Name ~= false then
+        local tag = text(row, "YOUR AVATAR", 8, "Accent", Enum.Font.GothamBold)
+        tag.Position = UDim2.fromOffset(height + 6, height / 2 - 26); tag.Size = UDim2.new(1, -(height + 14), 0, 10)
+        local nm = text(row, LocalPlayer.DisplayName, 16, "Text", Enum.Font.GothamBold)
+        nm.Position = UDim2.fromOffset(height + 6, height / 2 - 15); nm.Size = UDim2.new(1, -(height + 14), 0, 20)
+        local un = text(row, "@" .. LocalPlayer.Name, 11, "SubText", Enum.Font.Gotham)
+        un.Position = UDim2.fromOffset(height + 6, height / 2 + 5); un.Size = UDim2.new(1, -(height + 14), 0, 14)
+        local hint = text(row, "drag to rotate", 9, "SubText", Enum.Font.Gotham)
+        hint.Position = UDim2.fromOffset(height + 6, height / 2 + 22); hint.Size = UDim2.new(1, -(height + 14), 0, 12)
+    end
+
+    local model, center, ang, dragging, lastX = nil, Vector3.zero, 0, false, 0
+
+    local function build()
+        if model then model:Destroy(); model = nil end
+        local src
+        local char = LocalPlayer.Character
+        if uid == LocalPlayer.UserId and char then
+            local ok, c = pcall(function()
+                local old = char.Archivable
+                char.Archivable = true
+                local cl = char:Clone()
+                char.Archivable = old
+                return cl
+            end)
+            if ok then src = c end
+        end
+        if not src then
+            local ok, m = pcall(function() return Players:CreateHumanoidModelFromUserId(uid) end)
+            if ok then src = m end
+        end
+        if not src then loading.Text = "avatar unavailable"; return end
+
+        for _, d in ipairs(src:GetDescendants()) do
+            if d:IsA("BaseScript") or d:IsA("Sound") then d:Destroy()
+            elseif d:IsA("BasePart") then d.Anchored = true; d.CanCollide = false end
+        end
+        local hum = src:FindFirstChildOfClass("Humanoid")
+        if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
+        src.Parent = vp
+        src:PivotTo(CFrame.new(0, 0, 0))
+        local cf, size = src:GetBoundingBox()
+        center = cf.Position
+        local dist = (size.Y / 2) / math.tan(math.rad(cam.FieldOfView / 2)) * 1.12 + size.Z
+        cam.CFrame = CFrame.lookAt(center + Vector3.new(0, size.Y * 0.04, dist), center)
+        model = src
+        loading.Visible = false
+    end
+    task.spawn(function()
+        if uid == LocalPlayer.UserId and not LocalPlayer.Character then
+            local t0 = os.clock()
+            while not LocalPlayer.Character and os.clock() - t0 < 5 do task.wait(0.2) end
+        end
+        build()
+    end)
+
+    -- drag to rotate
+    vp.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; lastX = i.Position.X
+        end
+    end)
+    connect(UserInputService.InputChanged, function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            ang = ang + math.rad(i.Position.X - lastX) * 0.9
+            lastX = i.Position.X
+        end
+    end)
+    connect(UserInputService.InputEnded, function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+
+    local last = os.clock()
+    animate(row, function(t)
+        local dt = t - last; last = t
+        if not model then return end
+        if not dragging then ang = ang + math.rad(obj.Speed) * dt end
+        model:PivotTo(CFrame.new(center) * CFrame.Angles(0, ang, 0) * CFrame.new(-center))
+    end, gateOf(self))
+
+    function obj:Refresh() build() end
+    function obj:SetSpeed(v) obj.Speed = tonumber(v) or obj.Speed end
+    function obj:SetVisible(b) row.Visible = b end
+    return obj
+end
+
 ---------------------------------------------------------------- Owner card
 function Section:AddOwner(o)
     o = o or {}
@@ -3416,6 +3531,27 @@ end
 ----------------------------------------------------------------------
 -- Tab
 ----------------------------------------------------------------------
+-- ===== BUILT-IN INFO TAB (locked) =====================================================
+-- The library always creates its own "Info" tab (profile / owner / YouTube / Discord / avatar / stats).
+-- Scripts cannot edit it, and anything that duplicates it is swallowed:
+--   * Window:AddTab("Info") (or "Information")  -> ignored (a ghost tab that accepts any call and shows nothing)
+--   * info cards (AddProfile / AddOwner / AddSocial / AddStats / AddAvatar3D / AddOverview) on any other tab -> ignored
+local SEAL = { build = false }
+local function ghost()
+    local g
+    g = setmetatable({}, { __index = function(_, k) if k == "Value" then return nil end return function() return g end end })
+    return g
+end
+for _, m in ipairs({ "AddProfile", "AddOwner", "AddSocial", "AddStats", "AddAvatar3D", "AddOverview" }) do
+    local orig = Section[m]
+    if orig then
+        Section[m] = function(self, ...)
+            if SEAL.build then return orig(self, ...) end
+            return ghost()   -- the source's Info tab already shows this
+        end
+    end
+end
+
 local Tab = {}
 Tab.__index = Tab
 
@@ -3436,6 +3572,7 @@ function Tab:_cascade(delay0)
 end
 
 function Tab:AddSection(o)
+    if self._sealed and not SEAL.build then return ghost() end
     if type(o) == "string" then o = { Name = o } end
     o = o or {}
     self._sectionCount = (self._sectionCount or 0) + 1
@@ -4607,6 +4744,64 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
+    -- BUILT-IN mascot (locked: not configurable from example / scripts).
+    -- Anime girl peeks out from behind the LEFT edge of the window, no frame / no border,
+    -- and moves with the UI: parallax with the cursor, lift while dragging, bob when minimized.
+    -- Click her and she hops.
+    local MASCOT = {
+        Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
+        Size  = 150,   -- picture size
+        Show  = 100,   -- how many px stick out of the left edge (rest hides behind the window)
+        Y     = 64,    -- distance from the window's top edge
+    }
+    do
+        local sz, show = MASCOT.Size, MASCOT.Show
+        local holder = create("Frame", {
+            Name = "Mascot", AnchorPoint = Vector2.new(0, 0),
+            Position = UDim2.fromOffset(-show, MASCOT.Y), Size = UDim2.fromOffset(sz, sz),
+            BackgroundTransparency = 1, ZIndex = 1, Parent = Root,   -- below the window face (ZIndex 2) = peeks from behind
+        })
+        local pic = create("ImageButton", {
+            Name = "Pic", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1,
+            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = 1, Parent = holder,   -- no corner, no stroke
+        })
+        Yqantg:_image(MASCOT.Image, function(asset)
+            if not pic.Parent then return end
+            pic.Image = asset
+            tween(pic, 0.5, { ImageTransparency = 0 })
+        end)
+
+        local hop = 0
+        animate(holder, function(t)
+            local k = Yqantg.Depth
+            -- same motion as the UI layers: slides against the cursor + lifts while dragging
+            local ox = -par.x * 12 * k
+            local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
+            local rot = 0
+            -- same bob as the minimized window
+            if Window.Minimized then
+                oy = oy + math.sin(t * 2.2) * 3
+                rot = math.sin(t * 1.6) * 1.4
+            end
+            holder.Position = UDim2.fromOffset(-show + ox, MASCOT.Y + oy)
+            holder.Rotation = rot
+            holder.Visible = not Window.Minimized
+            -- idle breathing
+            pic.Rotation = math.sin(t * 1.1) * 2
+            pic.Size = UDim2.new(1, 0, 1 + math.sin(t * 2.2) * 0.025, 0)
+            if hop > 0 then
+                hop = math.max(0, hop - 0.12)
+                pic.Position = UDim2.new(.5, 0, 1, -math.sin((1 - hop) * math.pi) * sz * 0.25)
+            else
+                pic.Position = UDim2.fromScale(.5, 1)
+            end
+        end, vgate)
+        pic.MouseButton1Click:Connect(function()
+            if hop <= 0 then hop = 1; Yqantg:_sfx("Click") end
+        end)
+    end
+
     minBtn.MouseButton1Click:Connect(function() Window:Minimize() end)
     closeBtn.MouseButton1Click:Connect(function() Window:Close() end)
 
@@ -4727,6 +4922,10 @@ function Yqantg:CreateWindow(cfg)
 
     function Window:AddTab(o)
         if type(o) == "string" then o = { Name = o } end
+        if not SEAL.build and type(o) == "table" then
+            local n = tostring(o.Name or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "info" or n == "information" then return ghost() end   -- only the source's Info tab may exist
+        end
         local tab = setmetatable({ Name = o.Name or "Tab", Locked = o.Locked == true, Window = Window, Index = #Window.Tabs + 1, Fit = o.Fit }, Tab)
 
         local b = create("TextButton", {
@@ -4923,6 +5122,21 @@ function Yqantg:CreateWindow(cfg)
         else
             Window:SetBackground(bg)
         end
+    end
+
+    -- built-in Info tab: always first, always shown, locked against edits from scripts
+    do
+        SEAL.build = true
+        local infoTab = Window:AddTab({ Name = "Info" })
+        local ic = infoTab:AddSection({ Side = "Full", NoHeader = true })
+        ic:AddProfile()
+        ic:AddOwner({ Name = "Yqantg Hub", Subtitle = "Official owner", Link = "https://github.com/anhyeeuemnhieulam-ai/Yqantg-Hub" })
+        ic:AddSocial({ Kind = "YouTube" })
+        ic:AddSocial({ Kind = "Discord" })
+        ic:AddAvatar3D({ Height = 150, Speed = 40 })
+        ic:AddStats()
+        infoTab._sealed = true
+        SEAL.build = false
     end
 
     -- entrance: same 3D choreography as re-opening the window
