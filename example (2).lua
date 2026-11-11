@@ -10,7 +10,8 @@ local LocalPlayer = game:GetService("Players").LocalPlayer
 -- Yqantg.Icons.Notify = "rbxassetid://123"   -- id | url | {list} | false   (default: random anime girl)
 -- Yqantg.Icons.Orb    = { "https://...png", 456789 }
 
-Yqantg:Splash({ Title = "YQANTG", Subtitle = "UI Library", Steps = { "loading", "building", "done" }, Duration = 2 })
+-- cinematic intro: warp streaks, gyro logo, glitch title, segmented loader, shockwave exit
+Yqantg:Splash({ Title = "YQANTG", Subtitle = "UI Library", Steps = { "loading modules", "building interface", "ready" }, Duration = 3 })
 
 local Window = Yqantg:CreateWindow({
     Title        = "Yqantg Hub",
@@ -18,6 +19,7 @@ local Window = Yqantg:CreateWindow({
     Size         = UDim2.fromOffset(600, 380),
     ToggleKey    = Enum.KeyCode.RightShift,
     ToggleButton = true,                                   -- floating orb (anime image)
+    Dust         = true,                                   -- floating space-dust particles behind the content
     Background   = { Image = "anime", Transparency = 0.6 },-- image id | url | "anime" ; 0 = solid, 1 = hidden
     -- Background = { Image = 1234567890, Transparency = 0.5 },
 })
@@ -78,6 +80,14 @@ Rng:AddButton({
     end,
 })
 
+local Fx = Dev:AddSection({ Name = "Effects", Side = "Left" })
+Fx:AddToggle({ Name = "Space dust", Flag = "Dust", Default = true, Callback = function(on) Window:EnableDustParticles(on) end })
+Fx:AddToggle({ Name = "RGB flow (rainbow accent)", Flag = "RGB", Default = false, NoSave = true, Callback = function(on) Yqantg:ToggleRGBFlow(on) end })
+Fx:AddToggle({ Name = "Parallax", Flag = "Parallax", Default = Yqantg.Parallax, Callback = function(on) Yqantg.Parallax = on end })
+Fx:AddToggle({ Name = "Backdrop blur", Flag = "Blur", Default = Yqantg.BlurEnabled, Callback = function(on) Yqantg.BlurEnabled = on; Yqantg:_syncBlur() end })
+Fx:AddDropdown({ Name = "Theme", Flag = "Theme", Options = { "Obsidian", "Eclipse", "Graphite" }, Default = "Obsidian", Callback = function(v) Yqantg:SetTheme(v) end })
+Fx:AddSlider({ Name = "Depth", Flag = "Depth", Min = 0, Max = 1.5, Default = 1, Increment = 0.1, Callback = function(v) Yqantg:SetDepth(v) end })
+
 local Con = Dev:AddSection({ Name = "Console", Side = "Right" })
 local Log = Con:AddConsole({ Height = 140 })
 Log:Log("Console ready", "Success")
@@ -104,6 +114,8 @@ Yqantg:Notify({ Title = "Loaded", Content = "RightShift = hide · gear = setting
 --[[ API
     Yqantg:SetTheme("Obsidian" | "Eclipse" | "Graphite")   Yqantg:SetDepth(0..1.5)
     Yqantg.Parallax / BlurEnabled / SoundEnabled / BlockInput = true|false
+    Yqantg:ToggleRGBFlow(true|false)       Window:EnableDustParticles(true|false)
+    Yqantg:Splash({ Title, Subtitle, Steps, Duration })
     Yqantg.Flags.Slider          Yqantg.Options.Mode:Set("Fast")
     Yqantg:SaveConfig(n) / LoadConfig(n) / LoadAuto()
     Window:Toggle() / Minimize() / Close() / Destroy()     Yqantg:Unload()
