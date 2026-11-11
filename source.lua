@@ -7,7 +7,7 @@
     NEW in 2.0 (3D edition)
       • Window = real depth stack: slab layers + soft shadows + mouse parallax
         + specular light that follows the cursor
-      • Full open / close choreography: rise + tilt + scale (Back easing),
+      • Full open / close choreography: rise + tilt + scale (Back easing)q,
         staggered top-bar / tab / section pop-in, backdrop blur, sound cues
       • Drag = window "lifts" off the surface, drop = bounce back
       • 3D keycap buttons (extruded base, press-down, cursor parallax label)
@@ -1231,7 +1231,15 @@ local function playIntro(self)
     if Intro.running or Intro.done then return end
     Intro.running = true
 
-    local g = self:_ensureGui()
+    self:_ensureGui()
+    -- dedicated full-screen gui: ScreenInsets = None so it also covers the notch / safe-area bars
+    local g = create("ScreenGui", {
+        Name = "YqantgIntro_" .. HttpService:GenerateGUID(false):sub(1, 6),
+        ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 2147483000,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    })
+    pcall(function() g.ScreenInsets = Enum.ScreenInsets.None end)
+    Compat.mountGui(g)
     local TextService = svc("TextService")
 
     local TITLE = "YQANTG"
@@ -1587,6 +1595,7 @@ local function playIntro(self)
     alive = false
     if conn then conn:Disconnect() end
     if root then root:Destroy() end
+    g:Destroy()
     Intro.running = false
     Intro.done = true
 end
