@@ -4744,29 +4744,33 @@ function Yqantg:CreateWindow(cfg)
         end)
     end
 
-    -- BUILT-IN mascot (locked: not configurable from example / scripts).
-    -- Anime girl peeks out from behind the LEFT edge of the window, no frame / no border,
-    -- and moves with the UI: parallax with the cursor, lift while dragging, bob when minimized.
-    -- Click her and she hops.
-    local MASCOT = {
-        Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
-        Size  = 150,   -- picture size
-        Show  = 100,   -- how many px stick out of the left edge (rest hides behind the window)
-        Y     = 64,    -- distance from the window's top edge
+    -- BUILT-IN decorations (locked: not configurable from example / scripts).
+    --  1) anime girl peeking from behind the LEFT edge of the window
+    --  2) white mask sitting on the BOTTOM-LEFT corner (in front of the window)
+    -- No frame / no border. They move with the UI: parallax with the cursor, lift while dragging,
+    -- bob when minimized (then hidden). Click one and it hops.
+    local DECOR = {
+        {   -- anime girl
+            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
+            Size = 150, Anchor = Vector2.new(0, 0), Pos = UDim2.new(0, -100, 0, 64), Z = 1, Par = 1,
+        },
+        {   -- white mask, bottom-left corner
+            Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/IMG_20261112_075530.png",
+            Size = 100, Anchor = Vector2.new(0, 1), Pos = UDim2.new(0, -18, 1, 8), Z = 3, Par = 1.3,
+        },
     }
-    do
-        local sz, show = MASCOT.Size, MASCOT.Show
+    for _, def in ipairs(DECOR) do
+        local sz = def.Size
         local holder = create("Frame", {
-            Name = "Mascot", AnchorPoint = Vector2.new(0, 0),
-            Position = UDim2.fromOffset(-show, MASCOT.Y), Size = UDim2.fromOffset(sz, sz),
-            BackgroundTransparency = 1, ZIndex = 1, Parent = Root,   -- below the window face (ZIndex 2) = peeks from behind
+            Name = "Decor", AnchorPoint = def.Anchor, Position = def.Pos, Size = UDim2.fromOffset(sz, sz),
+            BackgroundTransparency = 1, ZIndex = def.Z, Parent = Root,   -- Z 1 = behind the window face (peeks out), Z 3 = in front
         })
         local pic = create("ImageButton", {
             Name = "Pic", AnchorPoint = Vector2.new(.5, 1), Position = UDim2.fromScale(.5, 1), Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1, AutoButtonColor = false, ImageTransparency = 1,
-            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = 1, Parent = holder,   -- no corner, no stroke
+            ScaleType = Enum.ScaleType.Fit, BorderSizePixel = 0, ZIndex = def.Z, Parent = holder,   -- no corner, no stroke
         })
-        Yqantg:_image(MASCOT.Image, function(asset)
+        Yqantg:_image(def.Image, function(asset)
             if not pic.Parent then return end
             pic.Image = asset
             tween(pic, 0.5, { ImageTransparency = 0 })
@@ -4774,7 +4778,7 @@ function Yqantg:CreateWindow(cfg)
 
         local hop = 0
         animate(holder, function(t)
-            local k = Yqantg.Depth
+            local k = Yqantg.Depth * def.Par
             -- same motion as the UI layers: slides against the cursor + lifts while dragging
             local ox = -par.x * 12 * k
             local oy = -par.y * 8 * k - liftV.Value * 0.6 * k
@@ -4784,7 +4788,7 @@ function Yqantg:CreateWindow(cfg)
                 oy = oy + math.sin(t * 2.2) * 3
                 rot = math.sin(t * 1.6) * 1.4
             end
-            holder.Position = UDim2.fromOffset(-show + ox, MASCOT.Y + oy)
+            holder.Position = UDim2.new(def.Pos.X.Scale, def.Pos.X.Offset + ox, def.Pos.Y.Scale, def.Pos.Y.Offset + oy)
             holder.Rotation = rot
             holder.Visible = not Window.Minimized
             -- idle breathing
