@@ -4752,17 +4752,17 @@ function Yqantg:CreateWindow(cfg)
     local DECOR = {
         {   -- anime girl
             Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/2770-removebg-preview.png",
-            Size = 150, Anchor = Vector2.new(0, 0), Pos = UDim2.new(0, -100, 0, 64), Z = 1, Par = 1,
+            W = 150, H = 150, Anchor = Vector2.new(0, 0), Pos = UDim2.new(0, -100, 0, 64), Z = 1, Par = 1,
         },
         {   -- white mask, bottom-left corner
             Image = "https://raw.githubusercontent.com/anhyeeuemnhieulam-ai/makingkiba/refs/heads/main/IMG_20261112_075530.png",
-            Size = 100, Anchor = Vector2.new(0, 1), Pos = UDim2.new(0, -18, 1, 8), Z = 3, Par = 1.3,
+            W = 66, H = 100, Anchor = Vector2.new(0, 1), Pos = UDim2.new(0, -24, 1, 6), Z = 3, Par = 1.3,   -- W~H*0.66 so no empty padding: hugs the corner
         },
     }
     for _, def in ipairs(DECOR) do
-        local sz = def.Size
+        local sz = def.H
         local holder = create("Frame", {
-            Name = "Decor", AnchorPoint = def.Anchor, Position = def.Pos, Size = UDim2.fromOffset(sz, sz),
+            Name = "Decor", AnchorPoint = def.Anchor, Position = def.Pos, Size = UDim2.fromOffset(def.W, def.H),
             BackgroundTransparency = 1, ZIndex = def.Z, Parent = Root,   -- Z 1 = behind the window face (peeks out), Z 3 = in front
         })
         local pic = create("ImageButton", {
